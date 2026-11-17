@@ -7,11 +7,15 @@ Tout reste sur la machine (Local-First AI).
 ## Démarrage
 
 ```bash
-npm install
+npm install        # télécharge aussi le binaire Electron (postinstall)
 npm run dev        # Vite (HMR pour l'UI) + Electron
 npm run build      # typecheck + build de production dans out/
 npm run preview    # lance le build de production
 ```
+
+> Depuis Electron 45, le paquet `electron` ne télécharge plus son binaire tout seul :
+> le script `postinstall` du projet appelle `install-electron`. Si tu vois `Error: Electron uninstall`,
+> lance `npx install-electron`.
 
 ## Architecture
 
