@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, shell, type Rectangle } from 'electron'
+import { app, BrowserWindow, shell, type Rectangle } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, UiCommand } from '@shared/types'
 import { DEFAULT_CHROME_TOP, DEFAULT_HOME_URL, isDev } from '../config'
@@ -28,6 +28,8 @@ export class MainWindow {
       show: false,
       backgroundColor: '#0f1115',
       title: 'Second Cerveau',
+      // Windows prend l'icône de l'exécutable ; Linux a besoin qu'on la fournisse à la fenêtre.
+      icon: process.platform === 'linux' ? windowIcon() : undefined,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -153,4 +155,8 @@ export class MainWindow {
       return { action: 'deny' }
     })
   }
+}
+
+function windowIcon(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'build/icon.png')
 }

@@ -4,24 +4,43 @@ Navigateur desktop (Electron + React) qui indexe localement le texte et l'aspect
 visitées pour permettre une recherche en langage naturel dans tout l'historique.
 Tout reste sur la machine (Local-First AI).
 
-## Démarrage
+## Installation (utilisateurs)
+
+Téléchargez l'installateur de la dernière version dans
+[Releases](https://github.com/evanitoGit/nav_second_cerveau/releases) :
+
+| Système | Fichier | Remarque |
+|---|---|---|
+| **Windows 10/11** | `Second Cerveau-Setup-x.y.z.exe` | Installation sans droits administrateur. L'exécutable n'est pas signé : Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même*. |
+| **Ubuntu / Debian** | `nav-second-cerveau_x.y.z_amd64.deb` | **Recommandé sous Linux.** `sudo apt install ./nav-second-cerveau_*.deb`. Configure automatiquement le bac à sable (AppArmor sur Ubuntu 24.04+). |
+| **Autres Linux** | `Second Cerveau-x.y.z-x86_64.AppImage` | `chmod +x` puis double-clic. Sur Ubuntu 24.04+, préférez le `.deb` (AppArmor bloque le bac à sable des AppImage). |
+
+Le navigateur se met ensuite à jour tout seul (téléchargement en arrière-plan, installation à la fermeture).
+Au premier usage de la mémoire, le modèle d'IA (~120 Mo) est téléchargé une fois.
+
+## Développement
 
 ```bash
 npm install        # télécharge aussi le binaire Electron (postinstall)
 npm run dev        # Vite (HMR pour l'UI) + Electron
 npm run build      # typecheck + build de production dans out/
-npm run preview    # lance le build de production
+npm run dist:linux # installateurs Linux dans release/ (sous Linux)
+npm run dist:win   # installateur Windows dans release/ (sous Windows)
 ```
+
+Les installateurs officiels sont construits par GitHub Actions (`.github/workflows/build.yml`) sur
+Windows et Linux à chaque push (onglet *Actions* → run → *Artifacts*).
+
+**Publier une version :** changer `version` dans `package.json`, committer, puis
+`git tag v0.2.0 && git push origin v0.2.0`. Le workflow publie la Release et les navigateurs installés se mettent à jour.
 
 > Depuis Electron 45, le paquet `electron` ne télécharge plus son binaire tout seul :
 > le script `postinstall` du projet appelle `install-electron`. Si tu vois `Error: Electron uninstall`,
 > lance `npx install-electron`.
 
-> **Linux (Ubuntu 23.10+ / 24.04+)** : si Electron s'arrête avec
+> **Linux (Ubuntu 23.10+ / 24.04+), en développement** : si Electron s'arrête avec
 > `The SUID sandbox helper binary was found, but is not configured correctly`, lance une fois
-> `npm run setup:linux-sandbox` (demande sudo). Le script ajoute un profil AppArmor pour le binaire
-> Electron du projet. On ne désactive **pas** le bac à sable (`--no-sandbox`) : ce navigateur charge
-> des pages web non fiables.
+> `npm run setup:linux-sandbox` (demande sudo). Inutile avec le `.deb`.
 
 ## Architecture
 
@@ -174,7 +193,7 @@ les pages web ne peuvent pas y accéder.
 
 ## Données locales
 
-Dans `app.getPath('userData')` (sous Linux : `~/.config/nav-second-cerveau/`) :
+Dans le dossier de données (Linux : `~/.config/nav-second-cerveau/`, Windows : `%APPDATA%\\nav-second-cerveau\\`) :
 
 - `memory/memory.db` — base SQLite (WAL)
 - `memory/screenshots/<id>.webp` — dernière capture de chaque page

@@ -1,0 +1,72 @@
+# Construit les installateurs Windows et Linux à chaque push.
+# - Sur une branche / PR : les installateurs sont disponibles dans les « Artifacts » du run.
+# - Sur un tag vX.Y.Z : ils sont publiés dans une Release GitHub (source des mises à jour automatiques).
+name: Build
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # publication des releases sur les tags
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            # 22.04 : glibc plus ancienne, donc paquets compatibles avec plus de distributions.
+            os: ubuntu-22.04
+            target: linux
+          - name: Windows
+            os: windows-latest
+            target: win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Vérification des types
+        run: npm run typecheck
+
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Installateurs
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then PUBLISH=always; else PUBLISH=never; fi
+          npx electron-builder --${{ matrix.target }} --x64 --publish "$PUBLISH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: second-cerveau-${{ matrix.target }}
+          path: |
+            release/*.exe
+            release/*.deb
+            release/*.AppImage
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14

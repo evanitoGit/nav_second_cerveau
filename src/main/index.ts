@@ -1,13 +1,21 @@
+import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerBrowserIpc } from './ipc/registerBrowserIpc'
 import { MemoryService } from './memory/MemoryService'
 import { registerScreenshotScheme, serveScreenshots } from './memory/screenshotProtocol'
 import { installAppMenu } from './menu'
 import { applyAppHardening } from './security/hardening'
+import { startAutoUpdates } from './updater'
 import { MainWindow } from './window/MainWindow'
 
 let mainWindow: MainWindow | null = null
 let memory: MemoryService | null = null
+
+// Dossier de données fixe (mémoire, modèle, cookies), identique en développement et une fois installé :
+// sans cela, le nom du produit (« Second Cerveau ») changerait l'emplacement par défaut.
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  app.setPath('userData', join(app.getPath('appData'), 'nav-second-cerveau'))
+}
 
 registerScreenshotScheme()
 
@@ -32,6 +40,7 @@ if (!app.requestSingleInstanceLock()) {
 
     registerBrowserIpc(() => mainWindow, memory)
     createMainWindow(memory)
+    startAutoUpdates()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0 && memory) createMainWindow(memory)
