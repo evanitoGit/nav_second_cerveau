@@ -59,6 +59,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Lance le navigateur packagé en mode autotest : base, sqlite-vec, WebP, vrai modèle d'IA,
+      # recherche. Garantit que le binaire FONCTIONNE sur chaque système, pas seulement qu'il compile.
+      - name: Cache du modèle d'IA
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/models
+          key: embedding-model-multilingual-e5-small-v1
+
+      - name: Autotest (Linux)
+        if: matrix.target == 'linux'
+        env:
+          SECOND_CERVEAU_MODELS_DIR: ${{ runner.temp }}/models
+        run: |
+          xvfb-run -a release/linux-unpacked/second-cerveau --self-test --self-test-report=self-test.json || STATUS=$?
+          cat self-test.json || true
+          exit ${STATUS:-0}
+
+      - name: Autotest (Windows)
+        if: matrix.target == 'win'
+        shell: pwsh
+        env:
+          SECOND_CERVEAU_MODELS_DIR: ${{ runner.temp }}/models
+        run: |
+          $exe = Get-ChildItem release/win-unpacked/*.exe | Where-Object { $_.Name -notlike '*Uninstall*' } | Select-Object -First 1
+          Write-Host "Exécutable : $($exe.FullName)"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--self-test', "--self-test-report=$PWD\self-test.json" -Wait -PassThru
+          Get-Content self-test.json -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+
       - name: Artifacts
         uses: actions/upload-artifact@v4
         with:

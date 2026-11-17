@@ -30,7 +30,8 @@ export class MemoryService extends EventEmitter<{ changed: [] }> {
   canEncodeWebp = true
   readonly screenshotsDir: string
 
-  constructor(userDataDir: string) {
+  /** @param modelsDir cache du modèle d'embeddings (par défaut <userData>/models) */
+  constructor(userDataDir: string, modelsDir = join(userDataDir, 'models')) {
     super()
     const root = join(userDataDir, 'memory')
     this.screenshotsDir = join(root, 'screenshots')
@@ -52,7 +53,7 @@ export class MemoryService extends EventEmitter<{ changed: [] }> {
       'embedding.worker',
       () => new Worker(embeddingWorkerPath),
       (client) =>
-        client.callDuringStartup('init', { modelId: EMBEDDING_MODEL, cacheDir: join(userDataDir, 'models'), fake })
+        client.callDuringStartup('init', { modelId: EMBEDDING_MODEL, cacheDir: modelsDir, fake })
     )
   }
 

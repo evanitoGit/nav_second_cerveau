@@ -21,6 +21,7 @@ export interface PageHit {
   lastVisitedAt: number
   visitCount: number
   matchedBy: { keywords: boolean; semantic: boolean }
+  semanticDistance?: number
 }
 
 interface Candidate {
@@ -30,6 +31,7 @@ interface Candidate {
   chunkText?: string
   keywords: boolean
   semantic: boolean
+  distance?: number
 }
 
 /** Page visitée dans la période : une visite enregistrée, ou la dernière visite (visites dédoublonnées). */
@@ -96,7 +98,7 @@ export function hybridSearch(db: DatabaseSync, params: SearchParams): PageHit[] 
     const cutoff = Math.min(SEMANTIC_MAX_DISTANCE, (rows[0]?.distance ?? 0) + SEMANTIC_RELATIVE_MARGIN)
     rows
       .filter((r) => r.distance <= cutoff)
-      .forEach((r, i) => add(r.pageId, i + 1, { semantic: true, chunkText: r.text }))
+      .forEach((r, i) => add(r.pageId, i + 1, { semantic: true, chunkText: r.text, distance: r.distance }))
   }
 
   const ranked = [...candidates.values()].sort((a, b) => b.rrf - a.rrf).slice(0, params.limit)
@@ -148,7 +150,8 @@ function hydrate(db: DatabaseSync, candidates: Candidate[]): PageHit[] {
         screenshotFile: p.screenshot_file,
         lastVisitedAt: p.last_visited_at,
         visitCount: p.visit_count,
-        matchedBy: { keywords: c.keywords, semantic: c.semantic }
+        matchedBy: { keywords: c.keywords, semantic: c.semantic },
+        semanticDistance: c.distance
       }
     ]
   })

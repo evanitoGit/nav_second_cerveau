@@ -30,6 +30,8 @@ export interface MemorySearchResult {
   lastVisitedAt: number
   visitCount: number
   matchedBy: { keywords: boolean; semantic: boolean }
+  /** Distance cosinus du meilleur passage (diagnostic), si trouvé par le sens. */
+  semanticDistance?: number
 }
 
 export interface MemorySearchResponse {

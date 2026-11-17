@@ -9,6 +9,7 @@ import { installAppMenu } from './menu'
 import { PermissionManager } from './permissions/PermissionManager'
 import { applyAppHardening } from './security/hardening'
 import { SessionStore } from './session/SessionStore'
+import { runSelfTest } from './selfTest'
 import { startAutoUpdates } from './updater'
 import { MainWindow, type MainWindowServices } from './window/MainWindow'
 
@@ -23,8 +24,11 @@ if (!app.commandLine.hasSwitch('user-data-dir')) {
 
 registerScreenshotScheme()
 
-// Une seule instance du navigateur : un seul écrivain sur la base SQLite.
-if (!app.requestSingleInstanceLock()) {
+if (process.argv.includes('--self-test')) {
+  // Autotest de la CI : aucune fenêtre, aucun verrou d'instance.
+  app.whenReady().then(async () => app.exit(await runSelfTest()))
+} else if (!app.requestSingleInstanceLock()) {
+  // Une seule instance du navigateur : un seul écrivain sur la base SQLite.
   app.quit()
 } else {
   app.on('second-instance', () => {
