@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
-import { registerNavigationIpc } from './ipc/registerNavigationIpc'
+import { registerBrowserIpc } from './ipc/registerBrowserIpc'
+import { installAppMenu } from './menu'
 import { applyAppHardening } from './security/hardening'
 import { MainWindow } from './window/MainWindow'
 
@@ -18,7 +19,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     applyAppHardening()
-    registerNavigationIpc(() => mainWindow)
+    installAppMenu()
+    registerBrowserIpc(() => mainWindow)
     createMainWindow()
 
     app.on('activate', () => {

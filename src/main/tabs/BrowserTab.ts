@@ -1,28 +1,39 @@
 import { EventEmitter } from 'node:events'
 import { WebContentsView, type Rectangle } from 'electron'
-import type { NavigationState } from '@shared/types'
+import type { TabState } from '@shared/types'
 import { isSafeWebUrl, normalizeAddressInput } from '@shared/url'
-import { BROWSING_PARTITION } from '../config'
+import { BROWSING_PARTITION, PRIVATE_PARTITION } from '../config'
+
+export type OpenDisposition = 'foreground' | 'background'
 
 interface BrowserTabEvents {
-  'state-changed': [NavigationState]
+  /** L'état affichable (titre, URL, chargement…) a changé. */
+  'state-changed': []
+  /** La page demande l'ouverture d'une URL dans un nouvel onglet (target=_blank, Ctrl+clic…). */
+  'open-url': [url: string, disposition: OpenDisposition]
 }
+
+let nextTabId = 1
 
 /**
  * Un onglet = une WebContentsView isolée (sandbox, sans Node, sans preload pour l'instant).
- * La classe encapsule la navigation et publie un `NavigationState` à chaque changement.
- * Elle sera réutilisée telle quelle par le TabManager à l'étape multi-onglets.
+ * La classe encapsule la navigation ; le TabManager écoute ses événements.
  */
 export class BrowserTab extends EventEmitter<BrowserTabEvents> {
+  readonly id = nextTabId++
+  readonly isPrivate: boolean
   readonly view: WebContentsView
   private title = 'Nouvel onglet'
   private favicon: string | null = null
+  /** Vrai dès qu'une navigation a été demandée, même si la page n'a pas encore d'URL. */
+  private navigationRequested = false
 
-  constructor() {
+  constructor(options: { isPrivate?: boolean } = {}) {
     super()
+    this.isPrivate = options.isPrivate ?? false
     this.view = new WebContentsView({
       webPreferences: {
-        partition: BROWSING_PARTITION,
+        partition: this.isPrivate ? PRIVATE_PARTITION : BROWSING_PARTITION,
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
@@ -32,6 +43,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
       }
     })
     this.view.setBackgroundColor('#ffffff')
+    this.view.setVisible(false)
     this.bindEvents()
   }
 
@@ -39,14 +51,21 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
     return this.view.webContents
   }
 
+  /** Nouvel onglet vide (aucune navigation demandée) : la barre d'adresse doit prendre le focus. */
+  get isBlank(): boolean {
+    const url = this.webContents.getURL()
+    return !this.navigationRequested && (url === '' || url === 'about:blank')
+  }
+
   async navigate(input: string): Promise<void> {
     const url = normalizeAddressInput(input)
     if (!isSafeWebUrl(url)) return
+    this.navigationRequested = true
     try {
       await this.webContents.loadURL(url)
     } catch (err) {
       // ERR_ABORTED (-3) survient quand une navigation en remplace une autre : normal.
-      if (!isAbortError(err)) console.warn('[BrowserTab] échec de chargement', url, err)
+      if (!isAbortError(err)) console.warn(`[tab ${this.id}] échec de chargement`, url, err)
     }
   }
 
@@ -70,9 +89,15 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
     this.view.setBounds(bounds)
   }
 
-  getState(): NavigationState {
+  setVisible(visible: boolean): void {
+    this.view.setVisible(visible)
+  }
+
+  getState(): TabState {
     const wc = this.webContents
     return {
+      id: this.id,
+      isPrivate: this.isPrivate,
       url: wc.getURL(),
       title: this.title,
       favicon: this.favicon,
@@ -88,8 +113,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
   }
 
   private emitState = (): void => {
-    if (this.webContents.isDestroyed()) return
-    this.emit('state-changed', this.getState())
+    if (!this.webContents.isDestroyed()) this.emit('state-changed')
   }
 
   private bindEvents(): void {
@@ -107,7 +131,12 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
       this.emitState()
     })
     wc.on('page-favicon-updated', (_e, favicons) => {
-      this.favicon = favicons[0] ?? null
+      this.favicon = favicons.find((f) => /^(https?|data):/.test(f)) ?? null
+      this.emitState()
+    })
+    wc.on('render-process-gone', (_e, details) => {
+      console.warn(`[tab ${this.id}] processus de rendu terminé :`, details.reason)
+      this.title = 'Page plantée — actualiser'
       this.emitState()
     })
 
@@ -116,9 +145,12 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
       if (!isSafeWebUrl(url)) e.preventDefault()
     })
 
-    // Pas de popups natives : en attendant le multi-onglets, on ouvre dans l'onglet courant.
-    wc.setWindowOpenHandler(({ url }) => {
-      if (isSafeWebUrl(url)) void this.navigate(url)
+    // Jamais de fenêtre native : toute ouverture devient un onglet géré par le TabManager.
+    // (window.opener n'est donc pas conservé, ce qui est aussi plus sûr.)
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (isSafeWebUrl(url) && url !== 'about:blank') {
+        this.emit('open-url', url, disposition === 'background-tab' ? 'background' : 'foreground')
+      }
       return { action: 'deny' }
     })
   }

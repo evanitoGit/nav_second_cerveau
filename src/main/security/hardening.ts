@@ -1,5 +1,5 @@
 import { app, session, type Session } from 'electron'
-import { BROWSING_PARTITION } from '../config'
+import { BROWSING_PARTITION, PRIVATE_PARTITION } from '../config'
 
 /**
  * Durcissement global, appelé une seule fois avant la création de toute fenêtre.
@@ -12,6 +12,7 @@ export function applyAppHardening(): void {
 
   lockDownSession(session.defaultSession)
   lockDownSession(session.fromPartition(BROWSING_PARTITION))
+  lockDownSession(session.fromPartition(PRIVATE_PARTITION))
 }
 
 /**
