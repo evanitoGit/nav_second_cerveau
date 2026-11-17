@@ -1,5 +1,4 @@
 import { app, session, type Session } from 'electron'
-import { BROWSING_PARTITION, PRIVATE_PARTITION } from '../config'
 
 /**
  * Durcissement global, appelé une seule fois avant la création de toute fenêtre.
@@ -10,15 +9,11 @@ export function applyAppHardening(): void {
     contents.on('will-attach-webview', (e) => e.preventDefault())
   })
 
+  // L'UI du navigateur n'a besoin d'aucune permission. Les sessions des pages web sont
+  // confiées au PermissionManager (demande à l'utilisateur).
   lockDownSession(session.defaultSession)
-  lockDownSession(session.fromPartition(BROWSING_PARTITION))
-  lockDownSession(session.fromPartition(PRIVATE_PARTITION))
 }
 
-/**
- * Politique de permissions MVP : tout est refusé (caméra, micro, géoloc, notifications…).
- * Une UI d'autorisation par site sera ajoutée plus tard.
- */
 function lockDownSession(ses: Session): void {
   ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
   ses.setPermissionCheckHandler(() => false)

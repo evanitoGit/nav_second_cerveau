@@ -14,6 +14,12 @@ export type ShortcutAction =
   | { type: 'back' }
   | { type: 'forward' }
   | { type: 'toggle-devtools' }
+  | { type: 'toggle-memory' }
+  | { type: 'find' }
+  | { type: 'zoom'; direction: 'in' | 'out' | 'reset' }
+  | { type: 'print' }
+  | { type: 'toggle-downloads' }
+  | { type: 'toggle-settings' }
 
 const isMac = process.platform === 'darwin'
 
@@ -31,6 +37,11 @@ export function matchShortcut(input: Input): ShortcutAction | null {
   if (input.control && !input.shift && key === 'pageup') return { type: 'previous-tab' }
 
   if (mod && !input.alt) {
+    // Zoom : testé sur la touche produite (en AZERTY, « - » est sur la touche 6).
+    if (input.key === '+' || input.key === '=' || input.code === 'NumpadAdd') return { type: 'zoom', direction: 'in' }
+    if (input.key === '-' || input.code === 'NumpadSubtract') return { type: 'zoom', direction: 'out' }
+    if (input.code === 'Digit0' || input.code === 'Numpad0') return { type: 'zoom', direction: 'reset' }
+
     const digit = /^Digit([1-9])$/.exec(input.code)?.[1]
     if (digit && !input.shift) return { type: 'select-tab', index: digit === '9' ? -1 : Number(digit) - 1 }
 
@@ -48,6 +59,16 @@ export function matchShortcut(input: Input): ShortcutAction | null {
         return { type: input.shift ? 'hard-reload' : 'reload' }
       case 'i':
         return input.shift ? { type: 'toggle-devtools' } : null
+      case 'k':
+        return input.shift ? { type: 'toggle-memory' } : null
+      case 'f':
+        return input.shift ? null : { type: 'find' }
+      case 'p':
+        return input.shift ? null : { type: 'print' }
+      case 'j':
+        return { type: 'toggle-downloads' }
+      case ',':
+        return { type: 'toggle-settings' }
       case '[':
         return isMac ? { type: 'back' } : null
       case ']':

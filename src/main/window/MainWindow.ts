@@ -1,30 +1,52 @@
 import { join } from 'node:path'
-import { BrowserWindow, shell, type Rectangle } from 'electron'
+import { app, BrowserWindow, screen, shell, type Rectangle } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, UiCommand } from '@shared/types'
-import { DEFAULT_CHROME_TOP, DEFAULT_HOME_URL, isDev } from '../config'
+import { CaptureService } from '../capture/CaptureService'
+import { DEFAULT_CHROME_TOP, isDev } from '../config'
+import type { DownloadManager } from '../downloads/DownloadManager'
+import type { MemoryService } from '../memory/MemoryService'
+import type { PermissionManager } from '../permissions/PermissionManager'
+import type { SavedSession, SessionStore } from '../session/SessionStore'
+import { settings } from '../settings'
 import { attachShortcuts, type ShortcutAction } from '../shortcuts'
+import { attachPageContextMenu, attachUiContextMenu } from '../tabs/contextMenu'
 import { TabManager } from '../tabs/TabManager'
+
+export interface MainWindowServices {
+  memory: MemoryService
+  downloads: DownloadManager
+  permissions: PermissionManager
+  session: SessionStore
+}
 
 /**
  * Fenêtre principale :
- * - son webContents affiche l'UI React (onglets, barre d'adresse, plus tard sidebar) ;
+ * - son webContents affiche l'UI React (onglets, barre d'adresse, panneaux) ;
  * - le TabManager superpose les WebContentsView des onglets dans la zone libre sous l'UI.
  */
 export class MainWindow {
   readonly window: BrowserWindow
   readonly tabs: TabManager
+  private readonly capture: CaptureService
   private insets: ChromeInsets = { top: DEFAULT_CHROME_TOP, right: 0 }
+  /** Une page (vidéo…) est en plein écran : elle occupe toute la fenêtre. */
+  private htmlFullscreen = false
+  private readonly cleanups: (() => void)[] = []
 
-  constructor() {
+  constructor(private readonly services: MainWindowServices) {
+    const saved = settings().get().restoreSession ? services.session.load() : null
+    const bounds = restorableBounds(saved?.window?.bounds)
+
     this.window = new BrowserWindow({
-      width: 1280,
-      height: 820,
+      ...(bounds ?? { width: 1280, height: 820 }),
       minWidth: 640,
       minHeight: 400,
       show: false,
       backgroundColor: '#0f1115',
       title: 'Second Cerveau',
+      // Windows prend l'icône de l'exécutable ; Linux a besoin qu'on la fournisse à la fenêtre.
+      icon: process.platform === 'linux' ? windowIcon() : undefined,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -34,30 +56,39 @@ export class MainWindow {
         spellcheck: false
       }
     })
+    if (saved?.window?.maximized) this.window.maximize()
 
     this.tabs = new TabManager(this.window, () => this.viewBounds())
+    this.capture = new CaptureService(services.memory, this.window, this.tabs)
     this.bindTabs()
+    this.bindServices()
     this.hardenUiContents()
     attachShortcuts(this.uiContents, (action) => this.runShortcut(action))
+    attachUiContextMenu(this.uiContents, this.window)
 
     this.window.once('ready-to-show', () => this.window.show())
     const relayout = () => this.tabs.layout()
-    this.window.on('resize', relayout)
-    this.window.on('maximize', relayout)
-    this.window.on('unmaximize', relayout)
-    this.window.on('enter-full-screen', relayout)
-    this.window.on('leave-full-screen', relayout)
-    this.window.on('closed', () => this.tabs.destroyAll())
+    for (const evt of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'] as const) {
+      this.window.on(evt as 'resize', relayout)
+    }
+    this.window.on('resized', () => this.saveSession())
+    this.window.on('moved', () => this.saveSession())
+    this.window.on('close', () => services.session.flush(this.sessionSnapshot()))
+    this.window.on('closed', () => {
+      for (const cleanup of this.cleanups) cleanup()
+      this.capture.dispose()
+      this.tabs.destroyAll()
+    })
 
     this.loadUi()
-    this.tabs.create({ url: DEFAULT_HOME_URL })
+    this.restoreTabs(saved)
   }
 
   get uiContents() {
     return this.window.webContents
   }
 
-  /** Appelé par l'UI (via IPC) quand la hauteur de la barre ou la largeur de la sidebar change. */
+  /** Appelé par l'UI (via IPC) quand la hauteur de la barre ou la largeur d'un panneau change. */
   setChromeInsets(insets: ChromeInsets): void {
     this.insets = insets
     this.tabs.layout()
@@ -92,7 +123,47 @@ export class MainWindow {
         return tab?.forward()
       case 'toggle-devtools':
         return tab?.webContents.toggleDevTools()
+      case 'toggle-memory':
+        return this.sendUiCommand('toggle-memory')
+      case 'find':
+        return this.sendUiCommand('open-find')
+      case 'zoom':
+        return tab?.zoom(action.direction)
+      case 'print':
+        return tab?.webContents.print()
+      case 'toggle-downloads':
+        return this.sendUiCommand('toggle-downloads')
+      case 'toggle-settings':
+        return this.sendUiCommand('toggle-settings')
     }
+  }
+
+  private restoreTabs(saved: SavedSession | null): void {
+    if (!saved || saved.tabs.length === 0) {
+      this.tabs.create({ url: settings().get().homeUrl })
+      return
+    }
+    const active = Math.min(Math.max(0, saved.activeIndex), saved.tabs.length - 1)
+    const created = saved.tabs.map((t) => this.tabs.create({ deferred: t, activate: false }))
+    this.tabs.activate(created[active].id)
+  }
+
+  private sessionSnapshot(): SavedSession {
+    const all = this.tabs.all.filter((t) => !t.isPrivate)
+    const tabs = all
+      .map((t) => t.getState())
+      .filter((s) => /^https?:\/\//.test(s.url))
+      .map((s) => ({ url: s.url, title: s.title }))
+    const activeId = this.tabs.active?.id
+    const activeIndex = Math.max(0, all.findIndex((t) => t.id === activeId))
+    const win = this.window.isDestroyed()
+      ? undefined
+      : { bounds: this.window.getNormalBounds(), maximized: this.window.isMaximized() }
+    return { tabs, activeIndex, window: win }
+  }
+
+  private saveSession(): void {
+    if (!this.window.isDestroyed()) this.services.session.save(this.sessionSnapshot())
   }
 
   private bindTabs(): void {
@@ -101,11 +172,59 @@ export class MainWindow {
       this.uiContents.send(IpcChannels.tabsChanged, snapshot)
       const active = snapshot.tabs.find((t) => t.id === snapshot.activeTabId)
       this.window.setTitle(active?.title ? `${active.title} — Second Cerveau` : 'Second Cerveau')
+      this.saveSession()
     })
     this.tabs.on('focus-address-bar', () => this.sendUiCommand('focus-address-bar'))
+    this.tabs.on('activated', () => {
+      if (this.htmlFullscreen) this.setHtmlFullscreen(false)
+    })
     this.tabs.on('tab-created', (tab) => {
       attachShortcuts(tab.webContents, (action) => this.runShortcut(action))
+      attachPageContextMenu(tab.webContents, this.window, tab.isPrivate, {
+        openInNewTab: (url, { background, isPrivate }) =>
+          this.tabs.create({ url, activate: !background, isPrivate: isPrivate ?? tab.isPrivate, openerId: isPrivate ? undefined : tab.id }),
+        searchWeb: (text) =>
+          this.tabs.create({ url: settings().searchUrl + encodeURIComponent(text), openerId: tab.id }),
+        print: () => tab.webContents.print()
+      })
+      tab.on('found-in-page', (result) => this.send(IpcChannels.findResult, result))
+      tab.on('html-fullscreen', (on) => {
+        if (tab === this.tabs.active) this.setHtmlFullscreen(on)
+      })
     })
+  }
+
+  private bindServices(): void {
+    const { memory, downloads, permissions } = this.services
+    const relay = <T extends unknown[]>(channel: string) => (...args: T) => this.send(channel, ...args)
+    const onMemory = relay(IpcChannels.memoryChanged)
+    const onDownloads = relay(IpcChannels.downloadsChanged)
+    const onDownloadStarted = relay(IpcChannels.downloadsStarted)
+    const onPermissions = relay(IpcChannels.permissionsChanged)
+    const onSettings = relay(IpcChannels.settingsChanged)
+    settings().on('changed', onSettings)
+    this.cleanups.push(() => settings().off('changed', onSettings))
+    memory.on('changed', onMemory)
+    downloads.on('changed', onDownloads)
+    downloads.on('started', onDownloadStarted)
+    permissions.on('changed', onPermissions)
+    this.cleanups.push(
+      () => memory.off('changed', onMemory),
+      () => downloads.off('changed', onDownloads),
+      () => downloads.off('started', onDownloadStarted),
+      () => permissions.off('changed', onPermissions)
+    )
+  }
+
+  /** Plein écran d'une page : la fenêtre passe en plein écran et la page masque l'UI. */
+  private setHtmlFullscreen(on: boolean): void {
+    this.htmlFullscreen = on
+    this.window.setFullScreen(on)
+    this.tabs.layout()
+  }
+
+  private send(channel: string, ...args: unknown[]): void {
+    if (!this.uiContents.isDestroyed()) this.uiContents.send(channel, ...args)
   }
 
   private sendUiCommand(command: UiCommand): void {
@@ -116,6 +235,7 @@ export class MainWindow {
 
   private viewBounds(): Rectangle {
     const [width, height] = this.window.getContentSize()
+    if (this.htmlFullscreen) return { x: 0, y: 0, width, height }
     const top = Math.min(this.insets.top, height)
     const right = Math.min(this.insets.right, width)
     return { x: 0, y: top, width: Math.max(0, width - right), height: Math.max(0, height - top) }
@@ -139,4 +259,20 @@ export class MainWindow {
       return { action: 'deny' }
     })
   }
+}
+
+function windowIcon(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'build/icon.png')
+}
+
+/** Position sauvegardée, seulement si elle est encore visible sur un écran branché. */
+function restorableBounds(bounds: Rectangle | undefined): Rectangle | null {
+  if (!bounds || bounds.width < 400 || bounds.height < 300) return null
+  const area = screen.getDisplayMatching(bounds).workArea
+  const visible =
+    bounds.x < area.x + area.width - 100 &&
+    bounds.x + bounds.width > area.x + 100 &&
+    bounds.y >= area.y - 20 &&
+    bounds.y < area.y + area.height - 100
+  return visible ? bounds : null
 }

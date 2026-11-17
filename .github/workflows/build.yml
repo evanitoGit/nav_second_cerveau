@@ -1,0 +1,101 @@
+# Construit les installateurs Windows et Linux à chaque push.
+# - Sur une branche / PR : les installateurs sont disponibles dans les « Artifacts » du run.
+# - Sur un tag vX.Y.Z : ils sont publiés dans une Release GitHub (source des mises à jour automatiques).
+name: Build
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # publication des releases sur les tags
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            # 22.04 : glibc plus ancienne, donc paquets compatibles avec plus de distributions.
+            os: ubuntu-22.04
+            target: linux
+          - name: Windows
+            os: windows-latest
+            target: win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Vérification des types
+        run: npm run typecheck
+
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Installateurs
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then PUBLISH=always; else PUBLISH=never; fi
+          npx electron-builder --${{ matrix.target }} --x64 --publish "$PUBLISH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lance le navigateur packagé en mode autotest : base, sqlite-vec, WebP, vrai modèle d'IA,
+      # recherche. Garantit que le binaire FONCTIONNE sur chaque système, pas seulement qu'il compile.
+      - name: Cache du modèle d'IA
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/models
+          key: embedding-model-multilingual-e5-small-v1
+
+      - name: Autotest (Linux)
+        if: matrix.target == 'linux'
+        env:
+          SECOND_CERVEAU_MODELS_DIR: ${{ runner.temp }}/models
+        run: |
+          xvfb-run -a release/linux-unpacked/second-cerveau --self-test --self-test-report=self-test.json || STATUS=$?
+          cat self-test.json || true
+          exit ${STATUS:-0}
+
+      - name: Autotest (Windows)
+        if: matrix.target == 'win'
+        shell: pwsh
+        env:
+          SECOND_CERVEAU_MODELS_DIR: ${{ runner.temp }}/models
+        run: |
+          $exe = Get-ChildItem release/win-unpacked/*.exe | Where-Object { $_.Name -notlike '*Uninstall*' } | Select-Object -First 1
+          Write-Host "Exécutable : $($exe.FullName)"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--self-test', "--self-test-report=$PWD\self-test.json" -Wait -PassThru
+          Get-Content self-test.json -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: second-cerveau-${{ matrix.target }}
+          path: |
+            release/*.exe
+            release/*.deb
+            release/*.AppImage
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14

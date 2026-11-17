@@ -1,0 +1,101 @@
+# Configuration du packaging : installateurs Windows (NSIS) et Linux (deb, AppImage).
+# Les builds officiels sont produits par GitHub Actions (.github/workflows/build.yml).
+appId: io.github.evanitogit.secondcerveau
+productName: Second Cerveau
+executableName: second-cerveau
+copyright: Copyright © 2026 evanitoGit
+
+directories:
+  buildResources: build
+  output: release
+
+# Aucun module natif à recompiler : node:sqlite est intégré à Electron, et sharp / sqlite-vec /
+# onnxruntime fournissent des binaires N-API précompilés (indépendants de la version d'Electron).
+npmRebuild: false
+
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+  # onnxruntime-web est déjà intégré dans le bundle de Transformers.js (141 Mo inutiles)
+  - '!node_modules/onnxruntime-web/**'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/darwin/**'
+  - '!node_modules/**/{test,tests,__tests__,example,examples,docs}/**'
+  - '!node_modules/**/*.{md,markdown,ts,tsx,map}'
+
+# Verrous de sécurité gravés dans le binaire Electron : impossible de le détourner
+# en interpréteur Node.js, de l'inspecter, ou de lui faire charger du code hors de app.asar.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+
+# Les bibliothèques natives doivent être lisibles hors de l'archive asar.
+asarUnpack:
+  - '**/*.node'
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/sqlite-vec/**
+  - node_modules/sqlite-vec-*/**
+  - node_modules/onnxruntime-node/**
+
+linux:
+  target:
+    - deb
+    - AppImage
+  category: Network
+  icon: build/icon.png
+  synopsis: Navigateur web à mémoire visuelle et sémantique locale
+  description: >-
+    Second Cerveau est un navigateur qui mémorise localement le texte et l'aspect des pages
+    que vous lisez, pour les retrouver en les décrivant en langage naturel.
+  maintainer: evanitoGit
+  mimeTypes:
+    - x-scheme-handler/http
+    - x-scheme-handler/https
+    - text/html
+  files:
+    - '!node_modules/onnxruntime-node/bin/napi-v6/win32/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/**'
+    # Accélération GPU NVIDIA inutile pour un petit modèle d'embeddings (≈ 300 Mo)
+    - '!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_{cuda,tensorrt}.so'
+
+deb:
+  # Le .deb installe un profil AppArmor et configure chrome-sandbox : le bac à sable
+  # de Chromium fonctionne sur Ubuntu 24.04+ sans manipulation.
+  packageCategory: web
+  priority: optional
+
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target:
+    - nsis
+  icon: build/icon.ico
+  files:
+    - '!node_modules/onnxruntime-node/bin/napi-v6/linux/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**'
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Second Cerveau
+  artifactName: ${productName}-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: evanitoGit
+  repo: nav_second_cerveau
+  releaseType: release

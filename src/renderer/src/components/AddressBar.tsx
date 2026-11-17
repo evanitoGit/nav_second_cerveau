@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Globe, Lock, VenetianMask } from 'lucide-react'
+import { Globe, Lock, ShieldCheck, VenetianMask } from 'lucide-react'
+import type { MemoryCaptureStatus } from '@shared/memory'
 import { useUiCommand } from '../hooks/useUiCommand'
+import { MemoryIndicator } from './MemoryIndicator'
 import { displayUrl } from '../lib/tabDisplay'
 
 interface AddressBarProps {
@@ -8,10 +10,13 @@ interface AddressBarProps {
   tabId: number | null
   url: string
   isPrivate: boolean
+  memory: MemoryCaptureStatus
+  zoomFactor: number
+  blockedCount: number
   onSubmit(input: string): void
 }
 
-export function AddressBar({ tabId, url, isPrivate, onSubmit }: AddressBarProps) {
+export function AddressBar({ tabId, url, isPrivate, memory, zoomFactor, blockedCount, onSubmit }: AddressBarProps) {
   const shownUrl = displayUrl(url)
   const [value, setValue] = useState(shownUrl)
   const [editing, setEditing] = useState(false)
@@ -70,6 +75,26 @@ export function AddressBar({ tabId, url, isPrivate, onSubmit }: AddressBarProps)
           }}
           className="min-w-0 flex-1 select-text bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
         />
+        {Math.abs(zoomFactor - 1) > 0.001 && (
+          <button
+            type="button"
+            title="Réinitialiser le zoom (Ctrl+0)"
+            onClick={() => void window.api.tabs.zoom('reset')}
+            className="shrink-0 rounded px-1.5 text-xs tabular-nums text-zinc-300 ring-1 ring-zinc-600 hover:bg-zinc-700"
+          >
+            {Math.round(zoomFactor * 100)} %
+          </button>
+        )}
+        {blockedCount > 0 && (
+          <span
+            title={`${blockedCount} publicité${blockedCount > 1 ? 's' : ''} ou traqueur${blockedCount > 1 ? 's' : ''} bloqué${blockedCount > 1 ? 's' : ''} sur cette page`}
+            className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-emerald-400/90"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {blockedCount > 99 ? '99+' : blockedCount}
+          </span>
+        )}
+        <MemoryIndicator status={memory} isPrivate={isPrivate} tabId={tabId} />
       </div>
     </form>
   )

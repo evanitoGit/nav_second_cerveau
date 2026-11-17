@@ -11,6 +11,8 @@ export interface CreateTabParams {
   activate?: boolean
   /** Onglet à l'origine de l'ouverture : le nouvel onglet est inséré juste après lui. */
   openerId?: number
+  /** Onglet restauré : chargé seulement à sa première activation. */
+  deferred?: { url: string; title: string }
 }
 
 interface TabManagerEvents {
@@ -18,8 +20,12 @@ interface TabManagerEvents {
   changed: [TabsSnapshot]
   /** L'onglet actif est vierge : l'UI doit donner le focus à la barre d'adresse. */
   'focus-address-bar': []
-  /** Nouvel onglet créé (pour brancher les raccourcis clavier, et plus tard la capture). */
+  /** Nouvel onglet créé (pour brancher les raccourcis clavier, la capture…). */
   'tab-created': [BrowserTab]
+  /** L'onglet actif a changé. */
+  activated: [tab: BrowserTab, previous: BrowserTab | null]
+  /** Onglet fermé (émis juste avant sa destruction). */
+  'tab-closed': [BrowserTab]
 }
 
 interface ClosedTab {
@@ -74,7 +80,8 @@ export class TabManager extends EventEmitter<TabManagerEvents> {
     )
     this.emit('tab-created', tab)
 
-    if (params.url) void tab.navigate(params.url)
+    if (params.deferred) tab.setDeferred(params.deferred.url, params.deferred.title)
+    else if (params.url) void tab.navigate(params.url)
     if (params.activate !== false || this.activeId === null) this.activate(tab.id)
     else this.scheduleEmit()
     return tab
@@ -107,6 +114,7 @@ export class TabManager extends EventEmitter<TabManagerEvents> {
     this.openers.delete(id)
     for (const [child, parent] of this.openers) if (parent === id) this.openers.delete(child)
     if (!this.window.isDestroyed()) this.window.contentView.removeChildView(tab.view)
+    this.emit('tab-closed', tab)
     tab.destroy()
 
     if (tab.isPrivate && !this.tabs.some((t) => t.isPrivate)) void clearPrivateSession()
@@ -134,11 +142,15 @@ export class TabManager extends EventEmitter<TabManagerEvents> {
     this.activeId = id
 
     tab.setBounds(this.getViewBounds())
-    tab.setVisible(true)
-    if (previous && previous !== tab) previous.setVisible(false)
+    tab.setActive(true)
+    if (previous && previous !== tab) {
+      previous.setActive(false)
+      previous.stopFind()
+    }
 
     if (tab.isBlank) this.emit('focus-address-bar')
     else tab.webContents.focus()
+    if (previous !== tab) this.emit('activated', tab, previous)
     this.scheduleEmit()
   }
 
