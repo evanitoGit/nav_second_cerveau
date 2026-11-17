@@ -74,7 +74,7 @@ deb:
   priority: optional
 
 appImage:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: Second-Cerveau-${version}-${arch}.${ext}
 
 win:
   target:
@@ -91,11 +91,12 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Second Cerveau
-  artifactName: ${productName}-Setup-${version}.${ext}
+  artifactName: Second-Cerveau-Setup-${version}.${ext}
   deleteAppDataOnUninstall: false
 
 publish:
   provider: github
   owner: evanitoGit
   repo: nav_second_cerveau
-  releaseType: release
+  # Brouillon : la CI le publie seulement quand Windows ET Linux ont réussi (voir build.yml).
+  releaseType: draft

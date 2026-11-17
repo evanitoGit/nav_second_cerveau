@@ -1,6 +1,9 @@
-# Construit les installateurs Windows et Linux à chaque push.
-# - Sur une branche / PR : les installateurs sont disponibles dans les « Artifacts » du run.
-# - Sur un tag vX.Y.Z : ils sont publiés dans une Release GitHub (source des mises à jour automatiques).
+# Construit et teste les installateurs Windows et Linux à chaque push.
+# - Branche / PR : installateurs disponibles dans les « Artifacts » du run.
+# - Publication d'une version (tag vX.Y.Z poussé, ou bouton « Run workflow » avec « Publier ») :
+#   brouillon de Release → installateurs déposés par chaque plateforme → Release publiée
+#   uniquement si les deux builds ET leurs autotests ont réussi. Les navigateurs installés
+#   se mettent alors à jour automatiquement.
 name: Build
 
 on:
@@ -9,19 +12,67 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publier une Release (version de package.json)'
+        type: boolean
+        default: false
 
 permissions:
-  contents: write # publication des releases sur les tags
+  contents: write
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.ref }}-${{ inputs.publish || false }}
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Préparation
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.mode.outputs.publish }}
+      version: ${{ steps.mode.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: mode
+        name: Mode de publication
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PUBLISH=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [[ "${GITHUB_REF#refs/tags/v}" != "$VERSION" ]]; then
+              echo "::error::Le tag ${GITHUB_REF#refs/tags/} ne correspond pas à la version $VERSION de package.json"
+              exit 1
+            fi
+            PUBLISH=true
+          elif [[ "${{ inputs.publish }}" == "true" ]]; then
+            PUBLISH=true
+          fi
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version $VERSION — publication : $PUBLISH"
+      - name: Brouillon de Release
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            if [[ "$(gh release view "v$VERSION" --json isDraft -q .isDraft)" != "true" ]]; then
+              echo "::error::La version v$VERSION est déjà publiée : augmentez la version dans package.json."
+              exit 1
+            fi
+          else
+            gh release create "v$VERSION" --draft --target "$GITHUB_SHA" \
+              --title "Second Cerveau $VERSION" --notes-file .github/release-notes.md
+          fi
+
   package:
     name: ${{ matrix.name }}
+    needs: prepare
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - name: Linux
@@ -52,12 +103,7 @@ jobs:
         run: npx electron-vite build
 
       - name: Installateurs
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then PUBLISH=always; else PUBLISH=never; fi
-          npx electron-builder --${{ matrix.target }} --x64 --publish "$PUBLISH"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --${{ matrix.target }} --x64 --publish never
 
       # Lance le navigateur packagé en mode autotest : base, sqlite-vec, WebP, vrai modèle d'IA,
       # recherche. Garantit que le binaire FONCTIONNE sur chaque système, pas seulement qu'il compile.
@@ -84,9 +130,22 @@ jobs:
         run: |
           $exe = Get-ChildItem release/win-unpacked/*.exe | Where-Object { $_.Name -notlike '*Uninstall*' } | Select-Object -First 1
           Write-Host "Exécutable : $($exe.FullName)"
-          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--self-test', "--self-test-report=$PWD\self-test.json" -Wait -PassThru
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--self-test', "--self-test-report=$PWD\\self-test.json" -Wait -PassThru
           Get-Content self-test.json -ErrorAction SilentlyContinue
           exit $p.ExitCode
+
+      # Déposé dans le brouillon seulement après un autotest réussi.
+      - name: Dépôt dans la Release
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          shopt -s nullglob
+          FILES=(release/*.exe release/*.exe.blockmap release/*.deb release/*.AppImage release/latest*.yml)
+          printf '%s\n' "${FILES[@]}"
+          gh release upload "v$VERSION" "${FILES[@]}" --clobber
 
       - name: Artifacts
         uses: actions/upload-artifact@v4
@@ -99,3 +158,15 @@ jobs:
             release/latest*.yml
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: Publication
+    needs: [prepare, package]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publier la Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest

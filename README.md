@@ -11,9 +11,9 @@ Téléchargez l'installateur de la dernière version dans
 
 | Système | Fichier | Remarque |
 |---|---|---|
-| **Windows 10/11** | `Second Cerveau-Setup-x.y.z.exe` | Installation sans droits administrateur. L'exécutable n'est pas signé : Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même*. |
+| **Windows 10/11** | `Second-Cerveau-Setup-x.y.z.exe` | Installation sans droits administrateur. L'exécutable n'est pas signé : Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même*. |
 | **Ubuntu / Debian** | `nav-second-cerveau_x.y.z_amd64.deb` | **Recommandé sous Linux.** `sudo apt install ./nav-second-cerveau_*.deb`. Configure automatiquement le bac à sable (AppArmor sur Ubuntu 24.04+). |
-| **Autres Linux** | `Second Cerveau-x.y.z-x86_64.AppImage` | `chmod +x` puis double-clic. Sur Ubuntu 24.04+, préférez le `.deb` (AppArmor bloque le bac à sable des AppImage). |
+| **Autres Linux** | `Second-Cerveau-x.y.z-x86_64.AppImage` | `chmod +x` puis double-clic. Sur Ubuntu 24.04+, préférez le `.deb` (AppArmor bloque le bac à sable des AppImage). |
 
 Le navigateur se met ensuite à jour tout seul (téléchargement en arrière-plan, installation à la fermeture).
 Au premier usage de la mémoire, le modèle d'IA (~120 Mo) est téléchargé une fois.
@@ -31,8 +31,12 @@ npm run dist:win   # installateur Windows dans release/ (sous Windows)
 Les installateurs officiels sont construits par GitHub Actions (`.github/workflows/build.yml`) sur
 Windows et Linux à chaque push (onglet *Actions* → run → *Artifacts*).
 
-**Publier une version :** changer `version` dans `package.json`, committer, puis
-`git tag v0.2.0 && git push origin v0.2.0`. Le workflow publie la Release et les navigateurs installés se mettent à jour.
+**Publier une version :** changer `version` dans `package.json` et committer, puis au choix :
+- GitHub → *Actions* → *Build* → *Run workflow* → cocher « Publier » ;
+- ou `git tag v0.2.0 && git push origin v0.2.0`.
+
+La CI crée un brouillon de Release, y dépose les installateurs Windows et Linux après leur autotest, puis
+publie la Release seulement si tout a réussi. Les navigateurs installés se mettent alors à jour.
 
 > Depuis Electron 45, le paquet `electron` ne télécharge plus son binaire tout seul :
 > le script `postinstall` du projet appelle `install-electron`. Si tu vois `Error: Electron uninstall`,
