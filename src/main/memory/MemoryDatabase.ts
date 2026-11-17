@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import type { EmbeddingJob, IngestResult, MemoryWorkerApi, PageCapture } from '../workers/types'
 import { chunkText } from './chunking'
+import { hybridSearch, recentPages, type PageHit, type SearchParams } from './hybridSearch'
 import { EMBEDDING_DIMS, MAX_TEXT_LENGTH, RECAPTURE_AFTER_MS, VISIT_DEDUP_MS } from './config'
 import { MIGRATIONS } from './schema'
 
@@ -148,6 +149,27 @@ export class MemoryDatabase {
           .prepare("UPDATE pages SET embedding_status = 'done', embedding_model = ? WHERE id = ?")
           .run(model, pageId)
       }
+    })
+  }
+
+  search(params: SearchParams): PageHit[] {
+    return hybridSearch(this.db, params)
+  }
+
+  recent(range: { from: number; to: number } | null, limit: number): PageHit[] {
+    return recentPages(this.db, range, limit)
+  }
+
+  /** « Oublier » une page : tout est supprimé. Retourne le fichier de capture à effacer. */
+  deletePage(pageId: number): { screenshotFile: string | null } | null {
+    return this.transaction(() => {
+      const page = this.db.prepare('SELECT screenshot_file FROM pages WHERE id = ?').get(pageId) as
+        | { screenshot_file: string | null }
+        | undefined
+      if (!page) return null
+      this.deleteChunks(pageId)
+      this.db.prepare('DELETE FROM pages WHERE id = ?').run(pageId) // visites : ON DELETE CASCADE
+      return { screenshotFile: page.screenshot_file }
     })
   }
 

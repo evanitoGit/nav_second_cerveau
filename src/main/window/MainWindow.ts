@@ -40,6 +40,11 @@ export class MainWindow {
 
     this.tabs = new TabManager(this.window, () => this.viewBounds())
     this.capture = new CaptureService(memory, this.window, this.tabs)
+    const onMemoryChanged = () => {
+      if (!this.uiContents.isDestroyed()) this.uiContents.send(IpcChannels.memoryChanged)
+    }
+    memory.on('changed', onMemoryChanged)
+    this.window.on('closed', () => memory.off('changed', onMemoryChanged))
     this.bindTabs()
     this.hardenUiContents()
     attachShortcuts(this.uiContents, (action) => this.runShortcut(action))
@@ -99,6 +104,8 @@ export class MainWindow {
         return tab?.forward()
       case 'toggle-devtools':
         return tab?.webContents.toggleDevTools()
+      case 'toggle-memory':
+        return this.sendUiCommand('toggle-memory')
     }
   }
 

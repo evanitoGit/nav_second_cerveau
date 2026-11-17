@@ -1,12 +1,15 @@
 import { app, BrowserWindow } from 'electron'
 import { registerBrowserIpc } from './ipc/registerBrowserIpc'
 import { MemoryService } from './memory/MemoryService'
+import { registerScreenshotScheme, serveScreenshots } from './memory/screenshotProtocol'
 import { installAppMenu } from './menu'
 import { applyAppHardening } from './security/hardening'
 import { MainWindow } from './window/MainWindow'
 
 let mainWindow: MainWindow | null = null
 let memory: MemoryService | null = null
+
+registerScreenshotScheme()
 
 // Une seule instance du navigateur : un seul écrivain sur la base SQLite.
 if (!app.requestSingleInstanceLock()) {
@@ -25,6 +28,7 @@ if (!app.requestSingleInstanceLock()) {
 
     memory = new MemoryService(app.getPath('userData'))
     memory.start().catch((err) => console.error('[memory] démarrage impossible :', err))
+    serveScreenshots(memory.screenshotsDir)
 
     registerBrowserIpc(() => mainWindow, memory)
     createMainWindow(memory)

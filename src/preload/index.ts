@@ -29,7 +29,11 @@ const api: BrowserApi = {
     onChanged: (listener) => subscribe(IpcChannels.tabsChanged, listener)
   },
   memory: {
-    getStats: () => ipcRenderer.invoke(IpcChannels.memoryGetStats)
+    getStats: () => ipcRenderer.invoke(IpcChannels.memoryGetStats),
+    search: (query) => ipcRenderer.invoke(IpcChannels.memorySearch, query),
+    recent: (limit) => ipcRenderer.invoke(IpcChannels.memoryRecent, limit),
+    deletePage: (pageId) => ipcRenderer.invoke(IpcChannels.memoryDelete, pageId),
+    onChanged: (listener) => subscribe(IpcChannels.memoryChanged, () => listener())
   },
   ui: {
     onCommand: (listener) => subscribe(IpcChannels.uiCommand, listener)

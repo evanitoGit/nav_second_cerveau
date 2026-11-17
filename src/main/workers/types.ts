@@ -1,4 +1,7 @@
 import type { MemoryStats } from '@shared/memory'
+import type { PageHit, SearchParams } from '../memory/hybridSearch'
+
+export type { PageHit, SearchParams }
 
 /** Contenu extrait d'une page par Readability. */
 export interface ExtractedContent {
@@ -51,6 +54,9 @@ export interface MemoryWorkerApi {
   pendingEmbeddingJobs(params: { limit: number }): EmbeddingJob[]
   storeEmbeddings(params: { pageId: number; model: string; chunkIds: number[]; vectors: Float32Array }): void
   markEmbeddingError(params: { pageId: number }): void
+  search(params: SearchParams): PageHit[]
+  recent(params: { range: { from: number; to: number } | null; limit: number }): PageHit[]
+  deletePage(params: { pageId: number }): { deleted: boolean }
   stats(params: void): Omit<MemoryStats, 'embeddingModel'>
   close(params: void): void
 }

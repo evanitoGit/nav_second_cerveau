@@ -14,13 +14,34 @@ const EXTRACTION_TIMEOUT_MS = 5_000
 const EXTRACT_SCRIPT = `${readabilitySource}
 ;(() => {
   const meta = (selector) => document.querySelector(selector)?.getAttribute('content')?.trim() || null
+  const BLOCK = /^(P|DIV|SECTION|ARTICLE|HEADER|FOOTER|ASIDE|MAIN|H[1-6]|LI|UL|OL|DL|DT|DD|TR|TABLE|BLOCKQUOTE|PRE|FIGURE|FIGCAPTION|HR)$/
+  // textContent colle les paragraphes entre eux : on insère des sauts de ligne après chaque bloc.
+  const textWithBreaks = (root) => {
+    let out = ''
+    const walk = (node) => {
+      if (node.nodeType === 3) { out += node.nodeValue; return }
+      if (node.nodeType !== 1) return
+      const tag = node.tagName
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return
+      if (tag === 'BR') { out += '\\n'; return }
+      for (const child of node.childNodes) walk(child)
+      if (BLOCK.test(tag)) out += '\\n\\n'
+      else if (tag === 'TD' || tag === 'TH') out += ' '
+    }
+    walk(root)
+    return out
+  }
   let article = null
   try {
     article = new Readability(document.cloneNode(true), { charThreshold: 300 }).parse()
   } catch (e) {}
-  const raw = (article && article.textContent && article.textContent.trim().length > 200)
-    ? article.textContent
-    : (document.body ? document.body.innerText : '')
+  let raw = ''
+  if (article && article.content && article.textContent && article.textContent.trim().length > 200) {
+    // DOMParser produit un document inerte : aucune image chargée, aucun script exécuté.
+    raw = textWithBreaks(new DOMParser().parseFromString(article.content, 'text/html').body)
+  } else if (document.body) {
+    raw = document.body.innerText
+  }
   const text = raw
     .replace(/\\r/g, '')
     .replace(/[ \\t\\u00a0]+/g, ' ')

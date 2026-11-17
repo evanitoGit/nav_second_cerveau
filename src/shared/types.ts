@@ -28,10 +28,12 @@ export interface TabsSnapshot {
 export interface CreateTabOptions {
   url?: string
   isPrivate?: boolean
+  /** false = ouvrir en arrière-plan. */
+  activate?: boolean
 }
 
 /** Commandes que le Main demande à l'UI d'exécuter (déclenchées par un raccourci clavier). */
-export type UiCommand = 'focus-address-bar'
+export type UiCommand = 'focus-address-bar' | 'toggle-memory'
 
 /**
  * Espace occupé par l'UI React autour de la WebContentsView (en pixels CSS).

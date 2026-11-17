@@ -40,7 +40,8 @@ async function fakeEmbedder(texts: string[]): Promise<Float32Array> {
   const out = new Float32Array(texts.length * EMBEDDING_DIMS)
   texts.forEach((text, t) => {
     const v = out.subarray(t * EMBEDDING_DIMS, (t + 1) * EMBEDDING_DIMS)
-    for (const word of text.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/\p{L}{3,}/gu) ?? []) {
+    const body = text.replace(/^(query|passage): /, '')
+    for (const word of body.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/\p{L}{3,}/gu) ?? []) {
       let h = 2166136261
       for (let i = 0; i < word.length; i++) h = Math.imul(h ^ word.charCodeAt(i), 16777619)
       v[(h >>> 0) % EMBEDDING_DIMS] += 1

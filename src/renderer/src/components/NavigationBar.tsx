@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Brain, RotateCw, X } from 'lucide-react'
 import type { TabState } from '@shared/types'
 import { AddressBar } from './AddressBar'
 
 interface NavigationBarProps {
   tab: TabState | null
+  memoryOpen: boolean
+  onToggleMemory(): void
 }
 
-export function NavigationBar({ tab }: NavigationBarProps) {
+export function NavigationBar({ tab, memoryOpen, onToggleMemory }: NavigationBarProps) {
   const nav = window.api.navigation
 
   return (
@@ -38,6 +40,10 @@ export function NavigationBar({ tab }: NavigationBarProps) {
         />
       </div>
 
+      <NavButton label="Mémoire (Ctrl+Maj+K)" active={memoryOpen} onClick={onToggleMemory}>
+        <Brain className="h-4 w-4" />
+      </NavButton>
+
       {/* Barre de progression discrète pendant le chargement */}
       <div
         className={`pointer-events-none absolute bottom-0 left-0 h-0.5 bg-sky-500 transition-all duration-500 ${
@@ -51,19 +57,23 @@ export function NavigationBar({ tab }: NavigationBarProps) {
 interface NavButtonProps {
   label: string
   disabled?: boolean
+  active?: boolean
   onClick(): void
   children: ReactNode
 }
 
-function NavButton({ label, disabled, onClick, children }: NavButtonProps) {
+function NavButton({ label, disabled, active, onClick, children }: NavButtonProps) {
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 disabled:cursor-default disabled:text-zinc-600 disabled:hover:bg-transparent"
+      className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-zinc-800 disabled:cursor-default disabled:text-zinc-600 disabled:hover:bg-transparent ${
+        active ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300'
+      }`}
     >
       {children}
     </button>

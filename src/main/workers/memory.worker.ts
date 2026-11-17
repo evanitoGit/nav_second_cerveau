@@ -3,7 +3,7 @@
  * Tout ce qui touche au disque se passe ici, jamais sur le thread principal d'Electron.
  */
 import { mkdirSync } from 'node:fs'
-import { rename, writeFile } from 'node:fs/promises'
+import { rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { MemoryDatabase } from '../memory/MemoryDatabase'
 import { SCREENSHOT_QUALITY, SCREENSHOT_WIDTH } from '../memory/config'
@@ -89,6 +89,16 @@ serve<MemoryWorkerApi>({
     database().storeEmbeddings(pageId, model, chunkIds, vectors),
 
   markEmbeddingError: ({ pageId }) => database().markEmbeddingError(pageId),
+
+  search: (params) => database().search(params),
+
+  recent: ({ range, limit }) => database().recent(range, limit),
+
+  async deletePage({ pageId }) {
+    const deleted = database().deletePage(pageId)
+    if (deleted?.screenshotFile) await rm(join(screenshotsDir, deleted.screenshotFile), { force: true })
+    return { deleted: deleted !== null }
+  },
 
   stats: () => database().stats(),
 

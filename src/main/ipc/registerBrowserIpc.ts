@@ -39,7 +39,7 @@ export function registerBrowserIpc(getWindow: () => MainWindow | null, memory: M
     if (!win) return
     const opts = typeof options === 'object' && options !== null ? (options as Record<string, unknown>) : {}
     const url = typeof opts.url === 'string' && opts.url.length <= 8192 ? opts.url : undefined
-    win.tabs.create({ url, isPrivate: opts.isPrivate === true })
+    win.tabs.create({ url, isPrivate: opts.isPrivate === true, activate: opts.activate !== false })
   })
 
   ipcMain.handle(IpcChannels.tabsClose, (event, tabId: unknown) => {
@@ -55,9 +55,25 @@ export function registerBrowserIpc(getWindow: () => MainWindow | null, memory: M
   })
 
   // --- Mémoire ---
-  ipcMain.handle(IpcChannels.memoryGetStats, (event) => {
+  const requireUi = (event: IpcMainInvokeEvent) => {
     if (!fromUi(event)) throw new Error('expéditeur non autorisé')
+  }
+  ipcMain.handle(IpcChannels.memoryGetStats, (event) => {
+    requireUi(event)
     return memory.stats()
+  })
+  ipcMain.handle(IpcChannels.memorySearch, (event, query: unknown) => {
+    requireUi(event)
+    if (typeof query !== 'string') throw new Error('requête invalide')
+    return memory.search(query.slice(0, 500))
+  })
+  ipcMain.handle(IpcChannels.memoryRecent, (event, limit: unknown) => {
+    requireUi(event)
+    return memory.recent(isInt(limit, 1) ? Math.min(limit, 100) : 20)
+  })
+  ipcMain.handle(IpcChannels.memoryDelete, (event, pageId: unknown) => {
+    requireUi(event)
+    return isInt(pageId, 1) ? memory.deletePage(pageId) : false
   })
 
   // --- Mise en page ---

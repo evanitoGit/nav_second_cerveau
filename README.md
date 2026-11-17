@@ -64,7 +64,6 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
     │   │   └── TabManager.ts        ✅ multi-onglets, privé, réouverture, ordre
     │   ├── ipc/
     │   │   ├── registerBrowserIpc.ts ✅ navigation + onglets (expéditeur et arguments validés)
-    │   │   └── registerMemoryIpc.ts ⏳
     │   ├── capture/
     │   │   ├── CaptureService.ts    ✅ déclenchement après 5 s sur une page (onglet actif, non privé)
     │   │   ├── extractContent.ts    ✅ Readability injecté dans un monde JS isolé
@@ -75,7 +74,9 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
     │   │   ├── MemoryDatabase.ts    ✅ node:sqlite + sqlite-vec (utilisé dans le worker)
     │   │   ├── chunking.ts          ✅ découpage du texte pour les embeddings
     │   │   ├── MemoryService.ts     ✅ façade Main : relais vers les workers, file d'embeddings
-    │   │   └── hybridSearch.ts      ⏳ étape 4 : BM25 + cosinus (Reciprocal Rank Fusion)
+    │   │   ├── queryParser.ts       ✅ périodes en français (« la semaine dernière »…) + requête FTS sûre
+    │   │   ├── hybridSearch.ts      ✅ BM25 + cosinus fusionnés par Reciprocal Rank Fusion
+    │   │   └── screenshotProtocol.ts ✅ schéma memory:// (miniatures, réservé à l'UI)
     │   └── workers/
     │       ├── rpc.ts               ✅ RPC typé Main ⇄ worker (redémarrage auto)
     │       ├── types.ts             ✅ contrats des workers
@@ -90,17 +91,18 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
             ├── main.tsx             ✅
             ├── App.tsx              ✅
             ├── index.css            ✅ Tailwind v4
-            ├── lib/tabDisplay.ts    ✅
+            ├── lib/                 ✅ tabDisplay, relativeTime
             ├── hooks/
             │   ├── useTabs.ts       ✅
             │   ├── useUiCommand.ts  ✅
+            │   └── useMemorySearch.ts ✅ recherche avec anti-rebond
             │   ├── useChromeInsets.ts    ✅
             └── components/
                 ├── NavigationBar.tsx ✅ précédent / suivant / actualiser-arrêter
                 ├── AddressBar.tsx   ✅ (Échap, style navigation privée)
                 ├── TabStrip.tsx     ✅ onglets, glisser-déposer, clic molette
                 ├── MemoryIndicator.tsx ✅ icône cerveau : en attente / mémorisée / ignorée
-                └── memory/          ⏳ MemorySidebar, SearchResultCard
+                └── memory/          ✅ MemorySidebar, ResultCard
 ```
 
 ## Raccourcis clavier
@@ -118,6 +120,7 @@ Cmd remplace Ctrl sur macOS.
 | Actualiser / sans cache | Ctrl+R, F5 / Ctrl+Maj+R |
 | Précédent / suivant | Alt+← / Alt+→ |
 | DevTools de la page | F12, Ctrl+Maj+I |
+| Mémoire (barre latérale) | Ctrl+Maj+K |
 
 La navigation privée utilise une session en mémoire, effacée à la fermeture du dernier onglet privé ;
 ces onglets ne seront jamais capturés ni indexés.
@@ -147,6 +150,27 @@ embedding.worker : multilingual-e5-small → vecteurs 384 d → sqlite-vec (cosi
 **SQLite :** on utilise `node:sqlite`, le module SQLite intégré à Node 24 (embarqué dans Electron 45),
 au lieu de `better-sqlite3` : même API synchrone, mais aucun module natif à recompiler pour Electron.
 sqlite-vec est chargé comme extension (binaire précompilé fourni par npm).
+
+## Mémoire : recherche
+
+Bouton cerveau de la barre d'outils ou **Ctrl+Maj+K**. On décrit la page en langage naturel :
+« l'article avec un graphique bleu sur l'optimisation SQL lu la semaine dernière ».
+
+1. **Période** : l'expression temporelle est extraite (aujourd'hui, hier, avant-hier, cette semaine,
+   la semaine dernière, ce mois-ci, le mois dernier, il y a N jours/semaines/mois, les N derniers jours,
+   lundi dernier, en mars…) et filtre les visites.
+2. **Mots-clés** : FTS5/BM25 sur titre (×8), URL (×2) et contenu, insensible aux accents, en préfixe.
+   Les mots vides (« retrouve », « article », « avec »…) sont ignorés ; la saisie est assainie (aucune syntaxe FTS injectable).
+3. **Sens** : la requête est vectorisée par le même modèle (préfixe « query: ») et comparée aux chunks (sqlite-vec).
+   Les résultats trop éloignés du meilleur sont écartés (`SEMANTIC_*` dans `memory/config.ts`).
+4. **Fusion** : Reciprocal Rank Fusion des deux classements. Si l'IA n'est pas prête en 4 s, mots-clés seuls.
+
+Résultats : miniature, titre, site, date de visite, extrait surligné, badges « mots-clés » / « sens ».
+Entrée ou clic : ouvrir (Ctrl/clic molette : en arrière-plan). Icône corbeille : **oublier** la page
+(texte, vecteurs, visites et capture supprimés).
+
+Les miniatures sont servies par le schéma privé `memory://`, enregistré uniquement sur la session de l'UI :
+les pages web ne peuvent pas y accéder.
 
 ## Données locales
 

@@ -1,4 +1,4 @@
-import type { MemoryStats } from './memory'
+import type { MemorySearchResponse, MemorySearchResult, MemoryStats } from './memory'
 import type { ChromeInsets, CreateTabOptions, TabsSnapshot, UiCommand } from './types'
 
 /** Noms des canaux IPC — source unique de vérité pour Main, Preload et Renderer. */
@@ -17,10 +17,14 @@ export const IpcChannels = {
   tabsMove: 'tabs:move',
   // Renderer -> Main (invoke) — mémoire
   memoryGetStats: 'memory:get-stats',
+  memorySearch: 'memory:search',
+  memoryRecent: 'memory:recent',
+  memoryDelete: 'memory:delete',
   // Renderer -> Main (send)
   layoutSetInsets: 'layout:set-insets',
   // Main -> Renderer (événements)
   tabsChanged: 'tabs:changed',
+  memoryChanged: 'memory:changed',
   uiCommand: 'ui:command'
 } as const
 
@@ -45,6 +49,12 @@ export interface BrowserApi {
   }
   memory: {
     getStats(): Promise<MemoryStats>
+    search(query: string): Promise<MemorySearchResponse>
+    recent(limit?: number): Promise<MemorySearchResult[]>
+    /** « Oublier » une page : texte, vecteurs, visites et capture sont supprimés. */
+    deletePage(pageId: number): Promise<boolean>
+    /** Une page a été ajoutée, vectorisée ou supprimée. */
+    onChanged(listener: () => void): () => void
   }
   ui: {
     onCommand(listener: (command: UiCommand) => void): () => void
