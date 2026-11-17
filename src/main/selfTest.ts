@@ -90,21 +90,24 @@ export async function runSelfTest(): Promise<number> {
     const related = await step(
       'recherche par le sens (sans mot commun)',
       () => memory.search('accélérer une base de données lente'),
-      (r) => r.semantic === 'used' && r.results[0]?.url === 'https://example.test/sql'
+      // La page de cuisine ne doit pas être remontée par le sens (seuil de pertinence).
+      (r) =>
+        r.semantic === 'used' &&
+        r.results[0]?.url === 'https://example.test/sql' &&
+        !r.results.some((x) => x.url === 'https://example.test/gratin')
     )
     await step(
       'recherche par mots-clés',
       () => memory.search('pommes de terre'),
       (r) => r.results[0]?.url === 'https://example.test/gratin'
     )
-    const unrelated = await memory.search('itinéraire de randonnée en montagne')
+    await step(
+      'requête sans rapport : aucun résultat',
+      () => memory.search('itinéraire de randonnée en montagne'),
+      (r) => r.results.length === 0
+    )
     report.steps.push({
-      name: 'calibrage : requête sans rapport (info)',
-      ok: true,
-      detail: unrelated.results.map((x) => ({ url: x.url, distance: x.semanticDistance }))
-    })
-    report.steps.push({
-      name: 'calibrage : requête liée (info)',
+      name: 'distances (info)',
       ok: true,
       detail: related.results.map((x) => ({ url: x.url, distance: x.semanticDistance }))
     })

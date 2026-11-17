@@ -4,9 +4,11 @@
  * - waiting   : l'utilisateur est sur la page, le délai de 5 s court
  * - capturing : extraction / capture d'écran en cours
  * - captured  : page enregistrée dans la mémoire locale
- * - skipped   : page exclue (onglet privé, site exclu, page sans texte…)
+ * - skipped   : page non mémorisée (onglet privé, page sans texte…)
+ * - paused    : mémorisation mise en pause dans les réglages
+ * - excluded  : site exclu par l'utilisateur
  */
-export type MemoryCaptureStatus = 'idle' | 'waiting' | 'capturing' | 'captured' | 'skipped'
+export type MemoryCaptureStatus = 'idle' | 'waiting' | 'capturing' | 'captured' | 'skipped' | 'paused' | 'excluded'
 
 export interface MemoryStats {
   pages: number

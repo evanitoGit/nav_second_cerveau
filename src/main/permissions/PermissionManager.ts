@@ -85,6 +85,13 @@ export class PermissionManager extends EventEmitter<{ changed: [PermissionPrompt
     this.emitChanged()
   }
 
+  /** Décisions mémorisées (hors navigation privée), pour la page de réglages. */
+  listSaved(): { origin: string; permission: string; decision: Decision }[] {
+    return Object.entries(this.persistent)
+      .flatMap(([origin, perms]) => Object.entries(perms).map(([permission, decision]) => ({ origin, permission, decision })))
+      .sort((a, b) => a.origin.localeCompare(b.origin))
+  }
+
   /** Oublie toutes les décisions d'une origine (ou de toutes si `origin` est omis). */
   reset(origin?: string): void {
     for (const store of [this.persistent, this.ephemeral]) {

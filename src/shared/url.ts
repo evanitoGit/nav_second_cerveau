@@ -1,4 +1,4 @@
-const SEARCH_ENGINE = 'https://www.google.com/search?q='
+const DEFAULT_SEARCH_URL = 'https://www.google.com/search?q='
 
 /** Protocoles qu'on accepte de charger dans une vue web. */
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
@@ -7,9 +7,9 @@ const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
  * Transforme la saisie de la barre d'adresse en URL chargeable :
  * - URL complète http(s) -> telle quelle
  * - "exemple.com", "localhost:3000" -> https:// / http:// préfixé
- * - tout le reste -> recherche Google
+ * - tout le reste -> recherche (moteur choisi dans les réglages)
  */
-export function normalizeAddressInput(raw: string): string {
+export function normalizeAddressInput(raw: string, searchUrl: string = DEFAULT_SEARCH_URL): string {
   const input = raw.trim()
   if (!input) return 'about:blank'
 
@@ -20,7 +20,7 @@ export function normalizeAddressInput(raw: string): string {
     } catch {
       /* on retombe sur la recherche */
     }
-    return SEARCH_ENGINE + encodeURIComponent(input)
+    return searchUrl + encodeURIComponent(input)
   }
 
   const looksLikeHost =
@@ -38,7 +38,7 @@ export function normalizeAddressInput(raw: string): string {
     }
   }
 
-  return SEARCH_ENGINE + encodeURIComponent(input)
+  return searchUrl + encodeURIComponent(input)
 }
 
 export function isSafeWebUrl(url: string): boolean {

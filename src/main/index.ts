@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, session } from 'electron'
+import { AdBlocker } from './adblock/AdBlocker'
 import { BROWSING_PARTITION, PRIVATE_PARTITION } from './config'
 import { DownloadManager } from './downloads/DownloadManager'
 import { registerBrowserIpc } from './ipc/registerBrowserIpc'
@@ -9,6 +10,8 @@ import { installAppMenu } from './menu'
 import { PermissionManager } from './permissions/PermissionManager'
 import { applyAppHardening } from './security/hardening'
 import { SessionStore } from './session/SessionStore'
+import { setSettingsStore } from './settings'
+import { SettingsStore } from './settings/SettingsStore'
 import { runSelfTest } from './selfTest'
 import { startAutoUpdates } from './updater'
 import { MainWindow, type MainWindowServices } from './window/MainWindow'
@@ -43,6 +46,8 @@ if (process.argv.includes('--self-test')) {
     installAppMenu()
 
     const userData = app.getPath('userData')
+    const settingsStore = new SettingsStore(join(userData, 'settings.json'))
+    setSettingsStore(settingsStore)
     memory = new MemoryService(userData)
     memory.start().catch((err) => console.error('[memory] démarrage impossible :', err))
     serveScreenshots(memory.screenshotsDir)
@@ -58,7 +63,18 @@ if (process.argv.includes('--self-test')) {
       permissions.attach(ses, isPrivate)
     }
 
-    const services: MainWindowServices = {
+    const adblock = new AdBlocker(join(userData, 'adblock-engine.bin'), [
+      session.fromPartition(BROWSING_PARTITION),
+      session.fromPartition(PRIVATE_PARTITION)
+    ])
+    void adblock.init(settingsStore.get().adblock.enabled)
+    settingsStore.on('changed', (s) => adblock.setEnabled(s.adblock.enabled))
+    adblock.on('blocked', (webContentsId) => {
+      mainWindow?.tabs.all.find((t) => !t.webContents.isDestroyed() && t.webContents.id === webContentsId)?.countBlocked()
+    })
+
+    const services: MainWindowServices & { settings: SettingsStore } = {
+      settings: settingsStore,
       memory,
       downloads,
       permissions,

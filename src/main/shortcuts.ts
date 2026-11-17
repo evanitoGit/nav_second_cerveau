@@ -19,6 +19,7 @@ export type ShortcutAction =
   | { type: 'zoom'; direction: 'in' | 'out' | 'reset' }
   | { type: 'print' }
   | { type: 'toggle-downloads' }
+  | { type: 'toggle-settings' }
 
 const isMac = process.platform === 'darwin'
 
@@ -66,6 +67,8 @@ export function matchShortcut(input: Input): ShortcutAction | null {
         return input.shift ? null : { type: 'print' }
       case 'j':
         return { type: 'toggle-downloads' }
+      case ',':
+        return { type: 'toggle-settings' }
       case '[':
         return isMac ? { type: 'back' } : null
       case ']':

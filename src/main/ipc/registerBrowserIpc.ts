@@ -1,4 +1,8 @@
-import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, Menu, session, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { normalizeHost } from '@shared/settings'
+import { BROWSING_PARTITION } from '../config'
+import type { SettingsStore } from '../settings/SettingsStore'
+import { checkForUpdatesNow } from '../updater'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, TabsSnapshot } from '@shared/types'
 import type { DownloadManager } from '../downloads/DownloadManager'
@@ -17,10 +21,11 @@ export interface IpcServices {
   memory: MemoryService
   downloads: DownloadManager
   permissions: PermissionManager
+  settings: SettingsStore
 }
 
 export function registerBrowserIpc(getWindow: () => MainWindow | null, services: IpcServices): void {
-  const { memory, downloads, permissions } = services
+  const { memory, downloads, permissions, settings } = services
   const fromUi = (event: IpcMainInvokeEvent | IpcMainEvent): MainWindow | null => {
     const win = getWindow()
     if (!win || event.sender !== win.uiContents) return null
@@ -93,7 +98,83 @@ export function registerBrowserIpc(getWindow: () => MainWindow | null, services:
     if (fromUi(event) && isInt(id, 1)) permissions.respond(id, allow === true, remember === true)
   })
 
+  // --- Réglages ---
+  ipcMain.handle(IpcChannels.settingsGet, (event) => {
+    requireUi(event)
+    return settings.get()
+  })
+  ipcMain.handle(IpcChannels.settingsUpdate, (event, patch: unknown) => {
+    requireUi(event)
+    return settings.update((patch ?? {}) as Parameters<SettingsStore['update']>[0])
+  })
+
+  // --- Confidentialité ---
+  ipcMain.handle(IpcChannels.permissionsSaved, (event) => {
+    requireUi(event)
+    return permissions.listSaved()
+  })
+  ipcMain.handle(IpcChannels.permissionsRevoke, (event, origin: unknown) => {
+    requireUi(event)
+    if (typeof origin === 'string') permissions.reset(origin)
+  })
+  ipcMain.handle(IpcChannels.browsingClearData, async (event) => {
+    requireUi(event)
+    const ses = session.fromPartition(BROWSING_PARTITION)
+    await Promise.all([ses.clearStorageData(), ses.clearCache(), ses.clearAuthCache()])
+  })
+
+  // --- Application ---
+  ipcMain.handle(IpcChannels.appInfo, (event) => {
+    requireUi(event)
+    return { version: app.getVersion(), platform: `${process.platform}-${process.arch}`, electron: process.versions.electron }
+  })
+  ipcMain.handle(IpcChannels.appCheckUpdates, (event) => {
+    requireUi(event)
+    return checkForUpdatesNow()
+  })
+
   // --- Mémoire ---
+  ipcMain.handle(IpcChannels.memoryClearAll, (event) => {
+    requireUi(event)
+    return memory.clearAll()
+  })
+  ipcMain.handle(IpcChannels.memoryForgetHost, (event, host: unknown) => {
+    requireUi(event)
+    const h = typeof host === 'string' ? normalizeHost(host) : null
+    return h ? memory.deleteHost(h) : 0
+  })
+  ipcMain.handle(IpcChannels.memoryIndicatorMenu, async (event, tabId: unknown) => {
+    const win = fromUi(event)
+    const tab = win && isInt(tabId, 1) ? win.tabs.get(tabId) : undefined
+    if (!win || !tab) return
+    const url = tab.webContents.getURL()
+    const host = normalizeHost(url)
+    const current = settings.get().memory
+    const excluded = !!host && current.excludedHosts.includes(host)
+    await new Promise<void>((resolve) => {
+      Menu.buildFromTemplate([
+        ...(host
+          ? [
+              {
+                label: excluded ? `Mémoriser à nouveau ${host}` : `Ne plus mémoriser ${host}`,
+                click: () =>
+                  settings.update({
+                    memory: {
+                      excludedHosts: excluded ? current.excludedHosts.filter((h) => h !== host) : [...current.excludedHosts, host]
+                    }
+                  })
+              },
+              { label: `Oublier toutes les pages de ${host}`, click: () => void memory.deleteHost(host) }
+            ]
+          : []),
+        { type: 'separator' as const },
+        {
+          label: current.enabled ? 'Mettre la mémorisation en pause' : 'Reprendre la mémorisation',
+          click: () => settings.update({ memory: { enabled: !current.enabled } })
+        }
+      ]).popup({ window: win.window, callback: () => resolve() })
+    })
+  })
   const requireUi = (event: IpcMainInvokeEvent) => {
     if (!fromUi(event)) throw new Error('expéditeur non autorisé')
   }

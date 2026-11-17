@@ -2,7 +2,9 @@ import type { BrowserWindow } from 'electron'
 import type { BrowserTab } from '../tabs/BrowserTab'
 import type { TabManager } from '../tabs/TabManager'
 import type { MemoryService } from '../memory/MemoryService'
+import { hostMatches } from '@shared/settings'
 import { CAPTURE_EXCLUDED_HOSTS, DWELL_MS, MIN_TEXT_LENGTH } from '../memory/config'
+import { settings } from '../settings'
 import { extractContent } from './extractContent'
 import { captureScreenshot } from './screenshot'
 
@@ -52,9 +54,20 @@ export class CaptureService {
     window.on('hide', pause)
     window.on('restore', resume)
     window.on('show', resume)
+
+    // Pause / reprise / nouvelle exclusion : on réévalue l'onglet actif immédiatement.
+    this.onSettings = () => {
+      const tab = this.tabs.active
+      for (const t of this.tabs.all) if (t !== tab && (t.memory === 'paused' || t.memory === 'excluded')) t.setMemoryStatus('idle')
+      if (tab) this.schedule(tab)
+    }
+    settings().on('changed', this.onSettings)
   }
 
+  private readonly onSettings: () => void
+
   dispose(): void {
+    settings().off('changed', this.onSettings)
     for (const timer of this.timers.values()) clearTimeout(timer)
     this.timers.clear()
   }
@@ -73,7 +86,10 @@ export class CaptureService {
     this.cancel(tab)
     const key = urlKey(tab.webContents.getURL())
     if (!key || tab.error) return tab.setMemoryStatus('idle')
-    if (!isCapturable(tab, key)) return tab.setMemoryStatus('skipped')
+    if (tab.isPrivate || isBuiltinExcluded(key)) return tab.setMemoryStatus('skipped')
+    const { enabled, excludedHosts } = settings().get().memory
+    if (excludedHosts.some((h) => hostMatches(new URL(key).hostname, h))) return tab.setMemoryStatus('excluded')
+    if (!enabled) return tab.setMemoryStatus('paused')
     if (this.capturedKey.get(tab.id) === key) return tab.setMemoryStatus('captured')
     if (this.inFlight.has(`${tab.id}|${key}`)) return
     if (this.window.isMinimized() || !this.window.isVisible()) return
@@ -160,10 +176,9 @@ function urlKey(url: string): string {
   }
 }
 
-function isCapturable(tab: BrowserTab, key: string): boolean {
-  if (tab.isPrivate) return false
+function isBuiltinExcluded(key: string): boolean {
   const host = new URL(key).hostname
-  return !CAPTURE_EXCLUDED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
+  return CAPTURE_EXCLUDED_HOSTS.some((h) => hostMatches(host, h))
 }
 
 function waitForLoad(tab: BrowserTab): Promise<void> {

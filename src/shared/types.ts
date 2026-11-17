@@ -19,6 +19,8 @@ export interface TabState extends NavigationState {
   memory: MemoryCaptureStatus
   /** 1 = 100 %. */
   zoomFactor: number
+  /** Publicités et traqueurs bloqués sur la page actuelle. */
+  blockedCount: number
   /** Échec de chargement de la page principale (affiché par l'UI à la place de la page). */
   error: { code: number; description: string; url: string } | null
 }
@@ -70,7 +72,7 @@ export interface CreateTabOptions {
 }
 
 /** Commandes que le Main demande à l'UI d'exécuter (déclenchées par un raccourci clavier). */
-export type UiCommand = 'focus-address-bar' | 'toggle-memory' | 'open-find' | 'toggle-downloads'
+export type UiCommand = 'focus-address-bar' | 'toggle-memory' | 'open-find' | 'toggle-downloads' | 'toggle-settings'
 
 /**
  * Espace occupé par l'UI React autour de la WebContentsView (en pixels CSS).

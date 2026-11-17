@@ -1,4 +1,5 @@
 import type { MemorySearchResponse, MemorySearchResult, MemoryStats } from './memory'
+import type { Settings } from './settings'
 import type {
   ChromeInsets,
   CreateTabOptions,
@@ -33,6 +34,16 @@ export const IpcChannels = {
   downloadsTogglePause: 'downloads:toggle-pause',
   downloadsClear: 'downloads:clear',
   permissionsList: 'permissions:list',
+  permissionsSaved: 'permissions:saved',
+  permissionsRevoke: 'permissions:revoke',
+  settingsGet: 'settings:get',
+  settingsUpdate: 'settings:update',
+  memoryClearAll: 'memory:clear-all',
+  memoryForgetHost: 'memory:forget-host',
+  memoryIndicatorMenu: 'memory:indicator-menu',
+  browsingClearData: 'browsing:clear-data',
+  appInfo: 'app:info',
+  appCheckUpdates: 'app:check-updates',
   permissionsRespond: 'permissions:respond',
   // Renderer -> Main (invoke) — mémoire
   memoryGetStats: 'memory:get-stats',
@@ -48,8 +59,17 @@ export const IpcChannels = {
   downloadsChanged: 'downloads:changed',
   downloadsStarted: 'downloads:started',
   permissionsChanged: 'permissions:changed',
+  settingsChanged: 'settings:changed',
   uiCommand: 'ui:command'
 } as const
+
+export type SettingsPatch = {
+  memory?: Partial<Settings['memory']>
+  searchEngine?: Settings['searchEngine']
+  homeUrl?: string
+  restoreSession?: boolean
+  adblock?: Partial<Settings['adblock']>
+}
 
 /** API exposée au Renderer via contextBridge sous `window.api`. */
 export interface BrowserApi {
@@ -92,8 +112,29 @@ export interface BrowserApi {
     respond(id: number, allow: boolean, remember: boolean): Promise<void>
     onChanged(listener: (prompts: PermissionPrompt[]) => void): () => void
   }
+  settings: {
+    get(): Promise<Settings>
+    /** Mise à jour partielle (ex. { memory: { enabled: false } }). */
+    update(patch: SettingsPatch): Promise<Settings>
+    onChanged(listener: (settings: Settings) => void): () => void
+  }
+  privacy: {
+    savedPermissions(): Promise<{ origin: string; permission: string; decision: 'allow' | 'deny' }[]>
+    revokePermissions(origin: string): Promise<void>
+    /** Efface cookies, stockage des sites et cache de la navigation normale. */
+    clearBrowsingData(): Promise<void>
+  }
+  app: {
+    info(): Promise<{ version: string; platform: string; electron: string }>
+    checkForUpdates(): Promise<string>
+  }
   memory: {
     getStats(): Promise<MemoryStats>
+    clearAll(): Promise<void>
+    /** Oublie toutes les pages d'un site ; retourne le nombre de pages supprimées. */
+    forgetHost(host: string): Promise<number>
+    /** Menu natif de l'icône cerveau (actions sur la page de l'onglet). */
+    showIndicatorMenu(tabId: number): Promise<void>
     search(query: string): Promise<MemorySearchResponse>
     recent(limit?: number): Promise<MemorySearchResult[]>
     /** « Oublier » une page : texte, vecteurs, visites et capture sont supprimés. */

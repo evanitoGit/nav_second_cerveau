@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, Brain, Download, RotateCw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Brain, Download, RotateCw, Settings, X } from 'lucide-react'
 import type { DownloadState, TabState } from '@shared/types'
 import { AddressBar } from './AddressBar'
 
@@ -10,10 +10,12 @@ interface NavigationBarProps {
   downloadsOpen: boolean
   onToggleMemory(): void
   onToggleDownloads(): void
+  settingsOpen: boolean
+  onToggleSettings(): void
 }
 
 export function NavigationBar(props: NavigationBarProps) {
-  const { tab, downloads, memoryOpen, downloadsOpen, onToggleMemory, onToggleDownloads } = props
+  const { tab, downloads, memoryOpen, downloadsOpen, onToggleMemory, onToggleDownloads, settingsOpen, onToggleSettings } = props
   const nav = window.api.navigation
 
   return (
@@ -41,6 +43,7 @@ export function NavigationBar(props: NavigationBarProps) {
           isPrivate={tab?.isPrivate ?? false}
           memory={tab?.memory ?? 'idle'}
           zoomFactor={tab?.zoomFactor ?? 1}
+          blockedCount={tab?.blockedCount ?? 0}
           onSubmit={(v) => void nav.navigate(v)}
         />
       </div>
@@ -52,6 +55,9 @@ export function NavigationBar(props: NavigationBarProps) {
       )}
       <NavButton label="Mémoire (Ctrl+Maj+K)" active={memoryOpen} onClick={onToggleMemory}>
         <Brain className="h-4 w-4" />
+      </NavButton>
+      <NavButton label="Réglages (Ctrl+,)" active={settingsOpen} onClick={onToggleSettings}>
+        <Settings className="h-4 w-4" />
       </NavButton>
 
       {/* Barre de progression discrète pendant le chargement */}

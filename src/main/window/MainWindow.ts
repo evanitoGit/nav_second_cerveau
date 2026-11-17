@@ -3,11 +3,12 @@ import { app, BrowserWindow, screen, shell, type Rectangle } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, UiCommand } from '@shared/types'
 import { CaptureService } from '../capture/CaptureService'
-import { DEFAULT_CHROME_TOP, DEFAULT_HOME_URL, isDev } from '../config'
+import { DEFAULT_CHROME_TOP, isDev } from '../config'
 import type { DownloadManager } from '../downloads/DownloadManager'
 import type { MemoryService } from '../memory/MemoryService'
 import type { PermissionManager } from '../permissions/PermissionManager'
 import type { SavedSession, SessionStore } from '../session/SessionStore'
+import { settings } from '../settings'
 import { attachShortcuts, type ShortcutAction } from '../shortcuts'
 import { attachPageContextMenu, attachUiContextMenu } from '../tabs/contextMenu'
 import { TabManager } from '../tabs/TabManager'
@@ -34,7 +35,7 @@ export class MainWindow {
   private readonly cleanups: (() => void)[] = []
 
   constructor(private readonly services: MainWindowServices) {
-    const saved = services.session.load()
+    const saved = settings().get().restoreSession ? services.session.load() : null
     const bounds = restorableBounds(saved?.window?.bounds)
 
     this.window = new BrowserWindow({
@@ -132,12 +133,14 @@ export class MainWindow {
         return tab?.webContents.print()
       case 'toggle-downloads':
         return this.sendUiCommand('toggle-downloads')
+      case 'toggle-settings':
+        return this.sendUiCommand('toggle-settings')
     }
   }
 
   private restoreTabs(saved: SavedSession | null): void {
     if (!saved || saved.tabs.length === 0) {
-      this.tabs.create({ url: DEFAULT_HOME_URL })
+      this.tabs.create({ url: settings().get().homeUrl })
       return
     }
     const active = Math.min(Math.max(0, saved.activeIndex), saved.tabs.length - 1)
@@ -181,7 +184,7 @@ export class MainWindow {
         openInNewTab: (url, { background, isPrivate }) =>
           this.tabs.create({ url, activate: !background, isPrivate: isPrivate ?? tab.isPrivate, openerId: isPrivate ? undefined : tab.id }),
         searchWeb: (text) =>
-          this.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(text)}`, openerId: tab.id }),
+          this.tabs.create({ url: settings().searchUrl + encodeURIComponent(text), openerId: tab.id }),
         print: () => tab.webContents.print()
       })
       tab.on('found-in-page', (result) => this.send(IpcChannels.findResult, result))
@@ -198,6 +201,9 @@ export class MainWindow {
     const onDownloads = relay(IpcChannels.downloadsChanged)
     const onDownloadStarted = relay(IpcChannels.downloadsStarted)
     const onPermissions = relay(IpcChannels.permissionsChanged)
+    const onSettings = relay(IpcChannels.settingsChanged)
+    settings().on('changed', onSettings)
+    this.cleanups.push(() => settings().off('changed', onSettings))
     memory.on('changed', onMemory)
     downloads.on('changed', onDownloads)
     downloads.on('started', onDownloadStarted)

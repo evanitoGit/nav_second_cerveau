@@ -3,7 +3,7 @@
  * Tout ce qui touche au disque se passe ici, jamais sur le thread principal d'Electron.
  */
 import { mkdirSync } from 'node:fs'
-import { rename, rm, writeFile } from 'node:fs/promises'
+import { readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { MemoryDatabase } from '../memory/MemoryDatabase'
 import { SCREENSHOT_QUALITY, SCREENSHOT_WIDTH } from '../memory/config'
@@ -98,6 +98,18 @@ serve<MemoryWorkerApi>({
     const deleted = database().deletePage(pageId)
     if (deleted?.screenshotFile) await rm(join(screenshotsDir, deleted.screenshotFile), { force: true })
     return { deleted: deleted !== null }
+  },
+
+  async deleteHost({ host }) {
+    const { deleted, screenshotFiles } = database().deleteHost(host)
+    await Promise.all(screenshotFiles.map((f) => rm(join(screenshotsDir, f), { force: true })))
+    return { deleted }
+  },
+
+  async clearAll() {
+    database().clearAll()
+    const files = await readdir(screenshotsDir).catch(() => [] as string[])
+    await Promise.all(files.map((f) => rm(join(screenshotsDir, f), { force: true })))
   },
 
   stats: () => database().stats(),

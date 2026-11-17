@@ -49,8 +49,25 @@ const api: BrowserApi = {
     respond: (id, allow, remember) => ipcRenderer.invoke(IpcChannels.permissionsRespond, id, allow, remember),
     onChanged: (listener) => subscribe(IpcChannels.permissionsChanged, listener)
   },
+  settings: {
+    get: () => ipcRenderer.invoke(IpcChannels.settingsGet),
+    update: (patch) => ipcRenderer.invoke(IpcChannels.settingsUpdate, patch),
+    onChanged: (listener) => subscribe(IpcChannels.settingsChanged, listener)
+  },
+  privacy: {
+    savedPermissions: () => ipcRenderer.invoke(IpcChannels.permissionsSaved),
+    revokePermissions: (origin) => ipcRenderer.invoke(IpcChannels.permissionsRevoke, origin),
+    clearBrowsingData: () => ipcRenderer.invoke(IpcChannels.browsingClearData)
+  },
+  app: {
+    info: () => ipcRenderer.invoke(IpcChannels.appInfo),
+    checkForUpdates: () => ipcRenderer.invoke(IpcChannels.appCheckUpdates)
+  },
   memory: {
     getStats: () => ipcRenderer.invoke(IpcChannels.memoryGetStats),
+    clearAll: () => ipcRenderer.invoke(IpcChannels.memoryClearAll),
+    forgetHost: (host) => ipcRenderer.invoke(IpcChannels.memoryForgetHost, host),
+    showIndicatorMenu: (tabId) => ipcRenderer.invoke(IpcChannels.memoryIndicatorMenu, tabId),
     search: (query) => ipcRenderer.invoke(IpcChannels.memorySearch, query),
     recent: (limit) => ipcRenderer.invoke(IpcChannels.memoryRecent, limit),
     deletePage: (pageId) => ipcRenderer.invoke(IpcChannels.memoryDelete, pageId),

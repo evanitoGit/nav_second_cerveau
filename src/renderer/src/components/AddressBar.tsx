@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Globe, Lock, VenetianMask } from 'lucide-react'
+import { Globe, Lock, ShieldCheck, VenetianMask } from 'lucide-react'
 import type { MemoryCaptureStatus } from '@shared/memory'
 import { useUiCommand } from '../hooks/useUiCommand'
 import { MemoryIndicator } from './MemoryIndicator'
@@ -12,10 +12,11 @@ interface AddressBarProps {
   isPrivate: boolean
   memory: MemoryCaptureStatus
   zoomFactor: number
+  blockedCount: number
   onSubmit(input: string): void
 }
 
-export function AddressBar({ tabId, url, isPrivate, memory, zoomFactor, onSubmit }: AddressBarProps) {
+export function AddressBar({ tabId, url, isPrivate, memory, zoomFactor, blockedCount, onSubmit }: AddressBarProps) {
   const shownUrl = displayUrl(url)
   const [value, setValue] = useState(shownUrl)
   const [editing, setEditing] = useState(false)
@@ -84,7 +85,16 @@ export function AddressBar({ tabId, url, isPrivate, memory, zoomFactor, onSubmit
             {Math.round(zoomFactor * 100)} %
           </button>
         )}
-        <MemoryIndicator status={memory} isPrivate={isPrivate} />
+        {blockedCount > 0 && (
+          <span
+            title={`${blockedCount} publicité${blockedCount > 1 ? 's' : ''} ou traqueur${blockedCount > 1 ? 's' : ''} bloqué${blockedCount > 1 ? 's' : ''} sur cette page`}
+            className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-emerald-400/90"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {blockedCount > 99 ? '99+' : blockedCount}
+          </span>
+        )}
+        <MemoryIndicator status={memory} isPrivate={isPrivate} tabId={tabId} />
       </div>
     </form>
   )

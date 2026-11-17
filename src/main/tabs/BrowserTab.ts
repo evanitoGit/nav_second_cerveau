@@ -4,6 +4,7 @@ import type { MemoryCaptureStatus } from '@shared/memory'
 import type { FindResult, TabState } from '@shared/types'
 import { isSafeWebUrl, normalizeAddressInput } from '@shared/url'
 import { BROWSING_PARTITION, PRIVATE_PARTITION } from '../config'
+import { settings } from '../settings'
 
 export type OpenDisposition = 'foreground' | 'background'
 
@@ -38,6 +39,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
   private navigationRequested = false
   private memoryStatus: MemoryCaptureStatus = 'idle'
   private loadError: TabState['error'] = null
+  private blocked = 0
   private active = false
   /** Onglet restauré pas encore chargé : URL et titre affichés en attendant l'activation. */
   private deferred: { url: string; title: string } | null = null
@@ -82,7 +84,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
   }
 
   async navigate(input: string): Promise<void> {
-    const url = normalizeAddressInput(input)
+    const url = normalizeAddressInput(input, settings().searchUrl)
     if (!isSafeWebUrl(url)) return
     this.navigationRequested = true
     this.deferred = null
@@ -125,6 +127,12 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
 
   stopFind(): void {
     if (!this.webContents.isDestroyed()) this.webContents.stopFindInPage('clearSelection')
+  }
+
+  /** Une requête de cette page a été bloquée (publicité, traqueur). */
+  countBlocked(): void {
+    this.blocked++
+    this.emitState()
   }
 
   /** Appelé par le TabManager : onglet affiché ou non. */
@@ -170,6 +178,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
       canGoForward: wc.navigationHistory.canGoForward(),
       memory: this.memoryStatus,
       zoomFactor: Math.round(wc.getZoomFactor() * 100) / 100,
+      blockedCount: this.blocked,
       error: this.loadError
     }
   }
@@ -212,6 +221,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
     })
 
     wc.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument) this.blocked = 0
       if (!details.isMainFrame || details.isSameDocument || !this.loadError) return
       this.loadError = null
       this.updateVisibility()

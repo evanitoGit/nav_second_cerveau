@@ -6,6 +6,7 @@ import { FindBar } from './components/FindBar'
 import { FOCUS_MEMORY_SEARCH_EVENT, MemorySidebar } from './components/memory/MemorySidebar'
 import { NavigationBar } from './components/NavigationBar'
 import { PermissionBar } from './components/PermissionBar'
+import { SettingsPanel } from './components/SettingsPanel'
 import { TabStrip } from './components/TabStrip'
 import { useChromeInsets } from './hooks/useChromeInsets'
 import { useDownloads } from './hooks/useDownloads'
@@ -14,7 +15,7 @@ import { useTabs } from './hooks/useTabs'
 import { useUiCommand } from './hooks/useUiCommand'
 import { isBlankUrl } from './lib/tabDisplay'
 
-type Panel = 'memory' | 'downloads' | null
+type Panel = 'memory' | 'downloads' | 'settings' | null
 
 export default function App() {
   const { tabs, activeTab } = useTabs()
@@ -49,6 +50,7 @@ export default function App() {
     else window.dispatchEvent(new CustomEvent(FOCUS_MEMORY_SEARCH_EVENT))
   })
   useUiCommand('toggle-downloads', () => togglePanel('downloads'))
+  useUiCommand('toggle-settings', () => togglePanel('settings'))
   useUiCommand('open-find', () => {
     if (!activeTab) return
     if (findOpen) window.dispatchEvent(new CustomEvent('focus-find'))
@@ -77,6 +79,8 @@ export default function App() {
           downloadsOpen={panel === 'downloads'}
           onToggleMemory={() => togglePanel('memory')}
           onToggleDownloads={() => togglePanel('downloads')}
+          settingsOpen={panel === 'settings'}
+          onToggleSettings={() => togglePanel('settings')}
         />
         {prompt && <PermissionBar key={prompt.id} prompt={prompt} />}
         {findOpen && (
@@ -94,6 +98,7 @@ export default function App() {
         <main className="min-w-0 flex-1">{activeTab?.error && <ErrorPage tab={activeTab} />}</main>
         {panel === 'memory' && <MemorySidebar onClose={closePanel} onOpen={openResult} />}
         {panel === 'downloads' && <DownloadsPanel downloads={downloads} onClose={closePanel} />}
+        {panel === 'settings' && <SettingsPanel onClose={closePanel} />}
       </div>
     </div>
   )

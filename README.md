@@ -63,24 +63,34 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
 .
 ├── electron.vite.config.ts          ✅ build main / preload / renderer
 ├── tsconfig.{json,node.json,web.json} ✅
-├── electron-builder.yml             ⏳ packaging
-├── resources/                       ⏳ icônes
+├── electron-builder.yml             ✅ installateurs Windows / Linux, fuses de sécurité
+├── build/                           ✅ icône (svg, png, ico)
+├── .github/workflows/build.yml      ✅ CI : build + autotest Windows et Linux, releases
 └── src/
     ├── shared/                      ✅ code partagé (aucune dépendance Electron)
     │   ├── ipc.ts                   ✅ noms des canaux + interface BrowserApi
     │   ├── types.ts                 ✅ TabState, TabsSnapshot, ChromeInsets
-    │   ├── url.ts                   ✅ saisie barre d'adresse → URL / recherche Google
+    │   ├── settings.ts              ✅ types et valeurs par défaut des réglages
+    │   ├── url.ts                   ✅ saisie barre d'adresse → URL / recherche
     │   └── memory.ts                ✅ statut de capture, statistiques
     ├── main/
     │   ├── index.ts                 ✅ bootstrap, single-instance lock
     │   ├── config.ts                ✅
     │   ├── menu.ts                  ✅ menu natif minimal (Édition sur macOS)
+    │   ├── updater.ts               ✅ mises à jour automatiques (releases GitHub)
+    │   ├── selfTest.ts              ✅ autotest du binaire (--self-test, utilisé par la CI)
+    │   ├── adblock/AdBlocker.ts     ✅ bloqueur (Ghostery) sur les sessions normale et privée
+    │   ├── downloads/DownloadManager.ts ✅
+    │   ├── permissions/PermissionManager.ts ✅ demandes d'autorisation mémorisées par site
+    │   ├── session/SessionStore.ts  ✅ restauration des onglets et de la fenêtre
+    │   ├── settings/                ✅ réglages persistants et validés
     │   ├── shortcuts.ts             ✅ raccourcis clavier (before-input-event)
     │   ├── security/hardening.ts    ✅ permissions refusées, <webview> interdit
     │   ├── window/MainWindow.ts     ✅ fenêtre UI + calcul de la zone des onglets
     │   ├── tabs/
     │   │   ├── BrowserTab.ts        ✅ une WebContentsView + son état de navigation
-    │   │   └── TabManager.ts        ✅ multi-onglets, privé, réouverture, ordre
+    │   │   ├── TabManager.ts        ✅ multi-onglets, privé, réouverture, ordre
+    │   │   └── contextMenu.ts       ✅ menus clic droit (pages et UI)
     │   ├── ipc/
     │   │   ├── registerBrowserIpc.ts ✅ navigation + onglets (expéditeur et arguments validés)
     │   ├── capture/
@@ -120,7 +130,9 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
                 ├── NavigationBar.tsx ✅ précédent / suivant / actualiser-arrêter
                 ├── AddressBar.tsx   ✅ (Échap, style navigation privée)
                 ├── TabStrip.tsx     ✅ onglets, glisser-déposer, clic molette
-                ├── MemoryIndicator.tsx ✅ icône cerveau : en attente / mémorisée / ignorée
+                ├── MemoryIndicator.tsx ✅ icône cerveau : état + menu d'actions
+                ├── FindBar.tsx · PermissionBar.tsx · ErrorPage.tsx ✅
+                ├── DownloadsPanel.tsx · SettingsPanel.tsx ✅
                 └── memory/          ✅ MemorySidebar, ResultCard
 ```
 
@@ -140,9 +152,35 @@ Cmd remplace Ctrl sur macOS.
 | Précédent / suivant | Alt+← / Alt+→ |
 | DevTools de la page | F12, Ctrl+Maj+I |
 | Mémoire (barre latérale) | Ctrl+Maj+K |
+| Rechercher dans la page | Ctrl+F (Entrée / Maj+Entrée, Échap) |
+| Zoom + / − / 100 % | Ctrl+= / Ctrl+− / Ctrl+0, Ctrl+molette |
+| Téléchargements | Ctrl+J |
+| Réglages | Ctrl+, |
+| Imprimer | Ctrl+P |
 
 La navigation privée utilise une session en mémoire, effacée à la fermeture du dernier onglet privé ;
 ces onglets ne seront jamais capturés ni indexés.
+
+## Navigateur
+
+- **Onglets** : glisser-déposer, clic molette, onglets privés, réouverture (Ctrl+Maj+T), restauration
+  au démarrage (seul l'onglet actif est chargé, les autres à la demande).
+- **Clic droit** : ouvrir un lien dans un nouvel onglet / onglet privé, copier le lien, enregistrer ou copier
+  une image, rechercher la sélection, couper/copier/coller, inspecter.
+- **Téléchargements** : enregistrés directement dans le dossier Téléchargements, panneau avec progression,
+  pause, annulation, ouverture.
+- **Autorisations** : caméra, micro, notifications, position… demandées dans une barre sous l'adresse,
+  mémorisées par site (pas en navigation privée), révocables dans les réglages.
+- **Bloqueur de publicités et traqueurs** (moteur Ghostery, listes EasyList / EasyPrivacy, rafraîchies
+  chaque semaine) : requêtes bloquées + emplacements masqués ; compteur dans la barre d'adresse.
+- **Plein écran** des vidéos, **page d'erreur** réseau, **zoom** mémorisé par site, **impression**.
+
+## Réglages (Ctrl+,)
+
+Mémoire (pause, sites jamais mémorisés, effacement total), moteur de recherche (Google, DuckDuckGo, Qwant,
+Bing, Ecosia), page d'accueil, restauration des onglets, bloqueur de publicités, autorisations des sites,
+effacement des cookies et du cache, version et mises à jour. L'icône cerveau de la barre d'adresse ouvre
+aussi un menu : *Ne plus mémoriser ce site*, *Oublier toutes les pages de ce site*, *Mettre en pause*.
 
 ## Mémoire : pipeline de capture
 
@@ -193,7 +231,7 @@ les pages web ne peuvent pas y accéder.
 
 ## Données locales
 
-Dans le dossier de données (Linux : `~/.config/nav-second-cerveau/`, Windows : `%APPDATA%\\nav-second-cerveau\\`) :
+Dans le dossier de données (Linux : `~/.config/nav-second-cerveau/`, Windows : `%APPDATA%\nav-second-cerveau`) :
 
 - `memory/memory.db` — base SQLite (WAL)
 - `memory/screenshots/<id>.webp` — dernière capture de chaque page

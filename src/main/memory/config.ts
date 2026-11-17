@@ -48,8 +48,9 @@ export const RRF_K = 60
 export const QUERY_EMBEDDING_TIMEOUT_MS = 4_000
 /**
  * Filtrage des résultats sémantiques (distance cosinus, 0 = identique) : on garde ceux qui sont
- * proches du meilleur résultat, sous un plafond absolu. Évite d'afficher des pages sans rapport
- * quand rien ne correspond vraiment. Valeurs à ajuster selon le modèle (e5 donne des distances resserrées).
+ * proches du meilleur résultat, sous un plafond absolu, pour ne pas afficher de pages sans rapport.
+ * Calibré sur multilingual-e5-small (autotest CI, identique Windows/Linux) : page pertinente ≈ 0,14,
+ * page sans rapport ≈ 0,17–0,20. À recalibrer si le modèle change.
  */
-export const SEMANTIC_MAX_DISTANCE = 0.6
-export const SEMANTIC_RELATIVE_MARGIN = 0.08
+export const SEMANTIC_MAX_DISTANCE = 0.165
+export const SEMANTIC_RELATIVE_MARGIN = 0.03

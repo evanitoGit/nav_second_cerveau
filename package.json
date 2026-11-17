@@ -35,6 +35,7 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
+    "@ghostery/adblocker-electron": "^2.20.3",
     "@huggingface/transformers": "^4.3.2",
     "electron-updater": "^6.8.11",
     "sharp": "^0.35.5",

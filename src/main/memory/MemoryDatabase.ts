@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import type { EmbeddingJob, IngestResult, MemoryWorkerApi, PageCapture } from '../workers/types'
+import { hostMatches } from '@shared/settings'
 import { chunkText } from './chunking'
 import { hybridSearch, recentPages, type PageHit, type SearchParams } from './hybridSearch'
 import { EMBEDDING_DIMS, MAX_TEXT_LENGTH, RECAPTURE_AFTER_MS, VISIT_DEDUP_MS } from './config'
@@ -173,6 +174,26 @@ export class MemoryDatabase {
     })
   }
 
+  /** Supprime toutes les pages d'un site (sous-domaines inclus). Retourne les captures à effacer. */
+  deleteHost(host: string): { deleted: number; screenshotFiles: string[] } {
+    const rows = this.db.prepare('SELECT id, url FROM pages').all() as { id: number; url: string }[]
+    const ids = rows.filter((r) => hostMatches(safeHost(r.url), host)).map((r) => r.id)
+    const files: string[] = []
+    for (const id of ids) {
+      const res = this.deletePage(id)
+      if (res?.screenshotFile) files.push(res.screenshotFile)
+    }
+    return { deleted: ids.length, screenshotFiles: files }
+  }
+
+  /** Efface toute la mémoire. */
+  clearAll(): void {
+    this.transaction(() => {
+      this.db.exec('DELETE FROM chunk_vectors; DELETE FROM chunks; DELETE FROM visits; DELETE FROM pages;')
+    })
+    this.db.exec("INSERT INTO pages_fts(pages_fts) VALUES ('rebuild'); VACUUM;")
+  }
+
   markEmbeddingError(pageId: number): void {
     this.db.prepare("UPDATE pages SET embedding_status = 'error' WHERE id = ?").run(pageId)
   }
@@ -226,6 +247,14 @@ export class MemoryDatabase {
       this.db.exec('ROLLBACK')
       throw err
     }
+  }
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
   }
 }
 

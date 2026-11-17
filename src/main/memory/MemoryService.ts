@@ -126,6 +126,19 @@ export class MemoryService extends EventEmitter<{ changed: [] }> {
     return deleted
   }
 
+  async deleteHost(host: string): Promise<number> {
+    const { deleted } = await this.memory.call('deleteHost', { host })
+    if (deleted) this.emit('changed')
+    return deleted
+  }
+
+  async clearAll(): Promise<void> {
+    this.queue.splice(1) // le lot en cours se terminera sur des chunks supprimés (ignorés)
+    this.queued.clear()
+    await this.memory.call('clearAll', undefined)
+    this.emit('changed')
+  }
+
   private async embedQuery(text: string): Promise<Float32Array> {
     if (this.model.status !== 'ready') this.model = { id: this.model.id, status: 'loading' }
     const { vectors } = await this.embeddings.call('embed', { texts: [text], kind: 'query' })

@@ -57,6 +57,8 @@ export interface MemoryWorkerApi {
   search(params: SearchParams): PageHit[]
   recent(params: { range: { from: number; to: number } | null; limit: number }): PageHit[]
   deletePage(params: { pageId: number }): { deleted: boolean }
+  deleteHost(params: { host: string }): { deleted: number }
+  clearAll(params: void): void
   stats(params: void): Omit<MemoryStats, 'embeddingModel'>
   close(params: void): void
 }
