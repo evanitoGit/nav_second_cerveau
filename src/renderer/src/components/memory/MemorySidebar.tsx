@@ -4,7 +4,8 @@ import type { MemorySearchResult, MemoryStats } from '@shared/memory'
 import { useMemorySearch } from '../../hooks/useMemorySearch'
 import { ResultCard } from './ResultCard'
 
-export const MEMORY_SIDEBAR_WIDTH = 400
+import { PANEL_WIDTH } from '../DownloadsPanel'
+
 export const FOCUS_MEMORY_SEARCH_EVENT = 'focus-memory-search'
 
 interface MemorySidebarProps {
@@ -41,7 +42,7 @@ export function MemorySidebar({ onClose, onOpen }: MemorySidebarProps) {
 
   return (
     <aside
-      style={{ width: MEMORY_SIDEBAR_WIDTH }}
+      style={{ width: PANEL_WIDTH }}
       className="flex h-full shrink-0 flex-col border-l border-zinc-800 bg-zinc-900"
       aria-label="Mémoire"
     >

@@ -1,5 +1,13 @@
 import type { MemorySearchResponse, MemorySearchResult, MemoryStats } from './memory'
-import type { ChromeInsets, CreateTabOptions, TabsSnapshot, UiCommand } from './types'
+import type {
+  ChromeInsets,
+  CreateTabOptions,
+  DownloadState,
+  FindResult,
+  PermissionPrompt,
+  TabsSnapshot,
+  UiCommand
+} from './types'
 
 /** Noms des canaux IPC — source unique de vérité pour Main, Preload et Renderer. */
 export const IpcChannels = {
@@ -15,6 +23,17 @@ export const IpcChannels = {
   tabsClose: 'tabs:close',
   tabsActivate: 'tabs:activate',
   tabsMove: 'tabs:move',
+  tabsZoom: 'tabs:zoom',
+  findStart: 'find:start',
+  findStop: 'find:stop',
+  downloadsList: 'downloads:list',
+  downloadsOpen: 'downloads:open',
+  downloadsShow: 'downloads:show',
+  downloadsCancel: 'downloads:cancel',
+  downloadsTogglePause: 'downloads:toggle-pause',
+  downloadsClear: 'downloads:clear',
+  permissionsList: 'permissions:list',
+  permissionsRespond: 'permissions:respond',
   // Renderer -> Main (invoke) — mémoire
   memoryGetStats: 'memory:get-stats',
   memorySearch: 'memory:search',
@@ -25,6 +44,10 @@ export const IpcChannels = {
   // Main -> Renderer (événements)
   tabsChanged: 'tabs:changed',
   memoryChanged: 'memory:changed',
+  findResult: 'find:result',
+  downloadsChanged: 'downloads:changed',
+  downloadsStarted: 'downloads:started',
+  permissionsChanged: 'permissions:changed',
   uiCommand: 'ui:command'
 } as const
 
@@ -44,8 +67,30 @@ export interface BrowserApi {
     close(tabId: number): Promise<void>
     activate(tabId: number): Promise<void>
     move(tabId: number, toIndex: number): Promise<void>
+    zoom(direction: 'in' | 'out' | 'reset'): Promise<void>
     /** Retourne une fonction de désabonnement. */
     onChanged(listener: (snapshot: TabsSnapshot) => void): () => void
+  }
+  find: {
+    /** Recherche dans l'onglet actif. `findNext` = passer à l'occurrence suivante du même texte. */
+    start(text: string, forward: boolean, findNext: boolean): Promise<void>
+    stop(): Promise<void>
+    onResult(listener: (result: FindResult) => void): () => void
+  }
+  downloads: {
+    list(): Promise<DownloadState[]>
+    open(id: number): Promise<void>
+    showInFolder(id: number): Promise<void>
+    cancel(id: number): Promise<void>
+    togglePause(id: number): Promise<void>
+    clearFinished(): Promise<void>
+    onChanged(listener: (downloads: DownloadState[]) => void): () => void
+    onStarted(listener: () => void): () => void
+  }
+  permissions: {
+    list(): Promise<PermissionPrompt[]>
+    respond(id: number, allow: boolean, remember: boolean): Promise<void>
+    onChanged(listener: (prompts: PermissionPrompt[]) => void): () => void
   }
   memory: {
     getStats(): Promise<MemoryStats>

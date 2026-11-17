@@ -11,10 +11,11 @@ interface AddressBarProps {
   url: string
   isPrivate: boolean
   memory: MemoryCaptureStatus
+  zoomFactor: number
   onSubmit(input: string): void
 }
 
-export function AddressBar({ tabId, url, isPrivate, memory, onSubmit }: AddressBarProps) {
+export function AddressBar({ tabId, url, isPrivate, memory, zoomFactor, onSubmit }: AddressBarProps) {
   const shownUrl = displayUrl(url)
   const [value, setValue] = useState(shownUrl)
   const [editing, setEditing] = useState(false)
@@ -73,6 +74,16 @@ export function AddressBar({ tabId, url, isPrivate, memory, onSubmit }: AddressB
           }}
           className="min-w-0 flex-1 select-text bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
         />
+        {Math.abs(zoomFactor - 1) > 0.001 && (
+          <button
+            type="button"
+            title="Réinitialiser le zoom (Ctrl+0)"
+            onClick={() => void window.api.tabs.zoom('reset')}
+            className="shrink-0 rounded px-1.5 text-xs tabular-nums text-zinc-300 ring-1 ring-zinc-600 hover:bg-zinc-700"
+          >
+            {Math.round(zoomFactor * 100)} %
+          </button>
+        )}
         <MemoryIndicator status={memory} isPrivate={isPrivate} />
       </div>
     </form>

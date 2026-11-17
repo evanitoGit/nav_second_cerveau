@@ -1,7 +1,9 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, TabsSnapshot } from '@shared/types'
+import type { DownloadManager } from '../downloads/DownloadManager'
 import type { MemoryService } from '../memory/MemoryService'
+import type { PermissionManager } from '../permissions/PermissionManager'
 import type { MainWindow } from '../window/MainWindow'
 
 const EMPTY_SNAPSHOT: TabsSnapshot = { tabs: [], activeTabId: null }
@@ -11,7 +13,14 @@ const EMPTY_SNAPSHOT: TabsSnapshot = { tabs: [], activeTabId: null }
  * Chaque message est vérifié : il doit provenir du webContents de l'UI (jamais d'une page web),
  * et ses arguments sont validés avant usage.
  */
-export function registerBrowserIpc(getWindow: () => MainWindow | null, memory: MemoryService): void {
+export interface IpcServices {
+  memory: MemoryService
+  downloads: DownloadManager
+  permissions: PermissionManager
+}
+
+export function registerBrowserIpc(getWindow: () => MainWindow | null, services: IpcServices): void {
+  const { memory, downloads, permissions } = services
   const fromUi = (event: IpcMainInvokeEvent | IpcMainEvent): MainWindow | null => {
     const win = getWindow()
     if (!win || event.sender !== win.uiContents) return null
@@ -52,6 +61,36 @@ export function registerBrowserIpc(getWindow: () => MainWindow | null, memory: M
 
   ipcMain.handle(IpcChannels.tabsMove, (event, tabId: unknown, toIndex: unknown) => {
     if (isInt(tabId, 1) && isInt(toIndex, 0)) fromUi(event)?.tabs.move(tabId, toIndex)
+  })
+
+  ipcMain.handle(IpcChannels.tabsZoom, (event, direction: unknown) => {
+    if (direction === 'in' || direction === 'out' || direction === 'reset') activeTab(event)?.zoom(direction)
+  })
+
+  // --- Recherche dans la page ---
+  ipcMain.handle(IpcChannels.findStart, (event, text: unknown, forward: unknown, findNext: unknown) => {
+    if (typeof text !== 'string' || text.length > 1000) return
+    activeTab(event)?.find(text, forward !== false, findNext === true)
+  })
+  ipcMain.handle(IpcChannels.findStop, (event) => activeTab(event)?.stopFind())
+
+  // --- Téléchargements ---
+  const withId = (fn: (id: number) => void) => (event: IpcMainInvokeEvent, id: unknown) => {
+    if (fromUi(event) && isInt(id, 1)) fn(id)
+  }
+  ipcMain.handle(IpcChannels.downloadsList, (event) => (fromUi(event) ? downloads.list() : []))
+  ipcMain.handle(IpcChannels.downloadsOpen, withId((id) => downloads.open(id)))
+  ipcMain.handle(IpcChannels.downloadsShow, withId((id) => downloads.showInFolder(id)))
+  ipcMain.handle(IpcChannels.downloadsCancel, withId((id) => downloads.cancel(id)))
+  ipcMain.handle(IpcChannels.downloadsTogglePause, withId((id) => downloads.togglePause(id)))
+  ipcMain.handle(IpcChannels.downloadsClear, (event) => {
+    if (fromUi(event)) downloads.clearFinished()
+  })
+
+  // --- Autorisations ---
+  ipcMain.handle(IpcChannels.permissionsList, (event) => (fromUi(event) ? permissions.list() : []))
+  ipcMain.handle(IpcChannels.permissionsRespond, (event, id: unknown, allow: unknown, remember: unknown) => {
+    if (fromUi(event) && isInt(id, 1)) permissions.respond(id, allow === true, remember === true)
   })
 
   // --- Mémoire ---

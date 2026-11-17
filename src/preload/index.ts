@@ -26,7 +26,28 @@ const api: BrowserApi = {
     close: (tabId) => ipcRenderer.invoke(IpcChannels.tabsClose, tabId),
     activate: (tabId) => ipcRenderer.invoke(IpcChannels.tabsActivate, tabId),
     move: (tabId, toIndex) => ipcRenderer.invoke(IpcChannels.tabsMove, tabId, toIndex),
+    zoom: (direction) => ipcRenderer.invoke(IpcChannels.tabsZoom, direction),
     onChanged: (listener) => subscribe(IpcChannels.tabsChanged, listener)
+  },
+  find: {
+    start: (text, forward, findNext) => ipcRenderer.invoke(IpcChannels.findStart, text, forward, findNext),
+    stop: () => ipcRenderer.invoke(IpcChannels.findStop),
+    onResult: (listener) => subscribe(IpcChannels.findResult, listener)
+  },
+  downloads: {
+    list: () => ipcRenderer.invoke(IpcChannels.downloadsList),
+    open: (id) => ipcRenderer.invoke(IpcChannels.downloadsOpen, id),
+    showInFolder: (id) => ipcRenderer.invoke(IpcChannels.downloadsShow, id),
+    cancel: (id) => ipcRenderer.invoke(IpcChannels.downloadsCancel, id),
+    togglePause: (id) => ipcRenderer.invoke(IpcChannels.downloadsTogglePause, id),
+    clearFinished: () => ipcRenderer.invoke(IpcChannels.downloadsClear),
+    onChanged: (listener) => subscribe(IpcChannels.downloadsChanged, listener),
+    onStarted: (listener) => subscribe(IpcChannels.downloadsStarted, () => listener())
+  },
+  permissions: {
+    list: () => ipcRenderer.invoke(IpcChannels.permissionsList),
+    respond: (id, allow, remember) => ipcRenderer.invoke(IpcChannels.permissionsRespond, id, allow, remember),
+    onChanged: (listener) => subscribe(IpcChannels.permissionsChanged, listener)
   },
   memory: {
     getStats: () => ipcRenderer.invoke(IpcChannels.memoryGetStats),

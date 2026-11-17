@@ -1,12 +1,16 @@
 import { join } from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, session } from 'electron'
+import { BROWSING_PARTITION, PRIVATE_PARTITION } from './config'
+import { DownloadManager } from './downloads/DownloadManager'
 import { registerBrowserIpc } from './ipc/registerBrowserIpc'
 import { MemoryService } from './memory/MemoryService'
 import { registerScreenshotScheme, serveScreenshots } from './memory/screenshotProtocol'
 import { installAppMenu } from './menu'
+import { PermissionManager } from './permissions/PermissionManager'
 import { applyAppHardening } from './security/hardening'
+import { SessionStore } from './session/SessionStore'
 import { startAutoUpdates } from './updater'
-import { MainWindow } from './window/MainWindow'
+import { MainWindow, type MainWindowServices } from './window/MainWindow'
 
 let mainWindow: MainWindow | null = null
 let memory: MemoryService | null = null
@@ -34,16 +38,34 @@ if (!app.requestSingleInstanceLock()) {
     applyAppHardening()
     installAppMenu()
 
-    memory = new MemoryService(app.getPath('userData'))
+    const userData = app.getPath('userData')
+    memory = new MemoryService(userData)
     memory.start().catch((err) => console.error('[memory] démarrage impossible :', err))
     serveScreenshots(memory.screenshotsDir)
 
-    registerBrowserIpc(() => mainWindow, memory)
-    createMainWindow(memory)
+    const downloads = new DownloadManager()
+    const permissions = new PermissionManager(
+      join(userData, 'permissions.json'),
+      (contents) => mainWindow?.tabs.all.find((t) => t.webContents === contents)?.id ?? null
+    )
+    for (const [partition, isPrivate] of [[BROWSING_PARTITION, false], [PRIVATE_PARTITION, true]] as const) {
+      const ses = session.fromPartition(partition)
+      downloads.watch(ses)
+      permissions.attach(ses, isPrivate)
+    }
+
+    const services: MainWindowServices = {
+      memory,
+      downloads,
+      permissions,
+      session: new SessionStore(join(userData, 'session.json'))
+    }
+    registerBrowserIpc(() => mainWindow, services)
+    createMainWindow(services)
     startAutoUpdates()
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0 && memory) createMainWindow(memory)
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow(services)
     })
   })
 
@@ -64,8 +86,8 @@ if (!app.requestSingleInstanceLock()) {
   })
 }
 
-function createMainWindow(memoryService: MemoryService): void {
-  mainWindow = new MainWindow(memoryService)
+function createMainWindow(services: MainWindowServices): void {
+  mainWindow = new MainWindow(services)
   mainWindow.window.on('closed', () => {
     mainWindow = null
   })

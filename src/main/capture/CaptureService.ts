@@ -72,7 +72,7 @@ export class CaptureService {
   private schedule(tab: BrowserTab): void {
     this.cancel(tab)
     const key = urlKey(tab.webContents.getURL())
-    if (!key) return tab.setMemoryStatus('idle')
+    if (!key || tab.error) return tab.setMemoryStatus('idle')
     if (!isCapturable(tab, key)) return tab.setMemoryStatus('skipped')
     if (this.capturedKey.get(tab.id) === key) return tab.setMemoryStatus('captured')
     if (this.inFlight.has(`${tab.id}|${key}`)) return
@@ -100,6 +100,7 @@ export class CaptureService {
     return (
       !tab.webContents.isDestroyed() &&
       tab === this.tabs.active &&
+      !tab.error &&
       urlKey(tab.webContents.getURL()) === key &&
       !this.window.isMinimized()
     )
