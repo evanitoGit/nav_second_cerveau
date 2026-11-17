@@ -1,21 +1,21 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { NavigationBar } from './components/NavigationBar'
+import { TabStrip } from './components/TabStrip'
 import { useChromeInsets } from './hooks/useChromeInsets'
-import { useNavigationState } from './hooks/useNavigationState'
+import { useTabs } from './hooks/useTabs'
 
 export default function App() {
-  const state = useNavigationState()
+  const { tabs, activeTab } = useTabs()
   const topRef = useRef<HTMLElement>(null)
   useChromeInsets(topRef)
 
-  useEffect(() => {
-    document.title = state.title ? `${state.title} — Second Cerveau` : 'Second Cerveau'
-  }, [state.title])
-
   return (
-    <div className="relative flex h-full flex-col">
-      <NavigationBar ref={topRef} state={state} />
-      {/* Zone recouverte par la WebContentsView, positionnée par le Main process. */}
+    <div className="flex h-full flex-col">
+      <header ref={topRef} className="shrink-0">
+        <TabStrip tabs={tabs} activeTabId={activeTab?.id ?? null} />
+        <NavigationBar tab={activeTab} />
+      </header>
+      {/* Zone recouverte par les WebContentsView, positionnées par le Main process. */}
       <main className="flex-1" />
     </div>
   )

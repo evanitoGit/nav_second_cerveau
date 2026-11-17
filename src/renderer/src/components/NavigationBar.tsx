@@ -1,52 +1,51 @@
-import { forwardRef, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, X } from 'lucide-react'
-import type { NavigationState } from '@shared/types'
+import type { TabState } from '@shared/types'
 import { AddressBar } from './AddressBar'
 
 interface NavigationBarProps {
-  state: NavigationState
+  tab: TabState | null
 }
 
-export const NavigationBar = forwardRef<HTMLElement, NavigationBarProps>(function NavigationBar(
-  { state },
-  ref
-) {
+export function NavigationBar({ tab }: NavigationBarProps) {
   const nav = window.api.navigation
 
   return (
-    <header
-      ref={ref}
-      className="flex h-12 shrink-0 items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2"
-    >
-      <NavButton label="Précédent" disabled={!state.canGoBack} onClick={() => void nav.back()}>
+    <div className="relative flex h-12 shrink-0 items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2">
+      <NavButton label="Précédent (Alt+←)" disabled={!tab?.canGoBack} onClick={() => void nav.back()}>
         <ArrowLeft className="h-4 w-4" />
       </NavButton>
-      <NavButton label="Suivant" disabled={!state.canGoForward} onClick={() => void nav.forward()}>
+      <NavButton label="Suivant (Alt+→)" disabled={!tab?.canGoForward} onClick={() => void nav.forward()}>
         <ArrowRight className="h-4 w-4" />
       </NavButton>
-      {state.isLoading ? (
+      {tab?.isLoading ? (
         <NavButton label="Arrêter" onClick={() => void nav.stop()}>
           <X className="h-4 w-4" />
         </NavButton>
       ) : (
-        <NavButton label="Actualiser" onClick={() => void nav.reload()}>
+        <NavButton label="Actualiser (Ctrl+R)" disabled={!tab} onClick={() => void nav.reload()}>
           <RotateCw className="h-4 w-4" />
         </NavButton>
       )}
 
       <div className="ml-1 flex min-w-0 flex-1">
-        <AddressBar url={state.url} favicon={state.favicon} onSubmit={(v) => void nav.navigate(v)} />
+        <AddressBar
+          tabId={tab?.id ?? null}
+          url={tab?.url ?? ''}
+          isPrivate={tab?.isPrivate ?? false}
+          onSubmit={(v) => void nav.navigate(v)}
+        />
       </div>
 
       {/* Barre de progression discrète pendant le chargement */}
       <div
-        className={`pointer-events-none absolute left-0 top-12 h-0.5 bg-sky-500 transition-all duration-500 ${
-          state.isLoading ? 'w-2/3 opacity-100' : 'w-full opacity-0'
+        className={`pointer-events-none absolute bottom-0 left-0 h-0.5 bg-sky-500 transition-all duration-500 ${
+          tab?.isLoading ? 'w-2/3 opacity-100' : 'w-full opacity-0'
         }`}
       />
-    </header>
+    </div>
   )
-})
+}
 
 interface NavButtonProps {
   label: string

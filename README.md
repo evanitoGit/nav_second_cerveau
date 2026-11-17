@@ -48,20 +48,21 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
 └── src/
     ├── shared/                      ✅ code partagé (aucune dépendance Electron)
     │   ├── ipc.ts                   ✅ noms des canaux + interface BrowserApi
-    │   ├── types.ts                 ✅ NavigationState, ChromeInsets
+    │   ├── types.ts                 ✅ TabState, TabsSnapshot, ChromeInsets
     │   ├── url.ts                   ✅ saisie barre d'adresse → URL / recherche Google
     │   └── memory.ts                ⏳ types MemoryEntry, SearchResult
     ├── main/
     │   ├── index.ts                 ✅ bootstrap, single-instance lock
     │   ├── config.ts                ✅
+    │   ├── menu.ts                  ✅ menu natif minimal (Édition sur macOS)
+    │   ├── shortcuts.ts             ✅ raccourcis clavier (before-input-event)
     │   ├── security/hardening.ts    ✅ permissions refusées, <webview> interdit
-    │   ├── window/MainWindow.ts     ✅ fenêtre UI + layout de la WebContentsView
+    │   ├── window/MainWindow.ts     ✅ fenêtre UI + calcul de la zone des onglets
     │   ├── tabs/
     │   │   ├── BrowserTab.ts        ✅ une WebContentsView + son état de navigation
-    │   │   └── TabManager.ts        ⏳ étape 2 : multi-onglets
+    │   │   └── TabManager.ts        ✅ multi-onglets, privé, réouverture, ordre
     │   ├── ipc/
-    │   │   ├── registerNavigationIpc.ts ✅ (validation de l'expéditeur)
-    │   │   ├── registerTabsIpc.ts   ⏳
+    │   │   ├── registerBrowserIpc.ts ✅ navigation + onglets (expéditeur et arguments validés)
     │   │   └── registerMemoryIpc.ts ⏳
     │   ├── capture/                 ⏳ étape 3
     │   │   ├── DwellTracker.ts      ⏳ déclenchement après 5 s sur une page
@@ -84,16 +85,36 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
             ├── main.tsx             ✅
             ├── App.tsx              ✅
             ├── index.css            ✅ Tailwind v4
+            ├── lib/tabDisplay.ts    ✅
             ├── hooks/
-            │   ├── useNavigationState.ts ✅
+            │   ├── useTabs.ts       ✅
+            │   ├── useUiCommand.ts  ✅
             │   ├── useChromeInsets.ts    ✅
-            │   └── useTabs.ts       ⏳
             └── components/
                 ├── NavigationBar.tsx ✅ précédent / suivant / actualiser-arrêter
-                ├── AddressBar.tsx   ✅ (Ctrl/Cmd+L, Échap)
-                ├── TabStrip.tsx     ⏳
+                ├── AddressBar.tsx   ✅ (Échap, style navigation privée)
+                ├── TabStrip.tsx     ✅ onglets, glisser-déposer, clic molette
                 └── memory/          ⏳ MemorySidebar, SearchResultCard
 ```
+
+## Raccourcis clavier
+
+Interceptés dans le Main (`before-input-event`), donc actifs même quand la page web a le focus.
+Cmd remplace Ctrl sur macOS.
+
+| Action | Raccourci |
+|---|---|
+| Nouvel onglet / onglet privé | Ctrl+T / Ctrl+Maj+N |
+| Fermer / rouvrir le dernier fermé | Ctrl+W / Ctrl+Maj+T |
+| Onglet suivant / précédent | Ctrl+Tab, Ctrl+PgSuiv / Ctrl+Maj+Tab, Ctrl+PgPréc |
+| Aller à l'onglet 1…8 / dernier | Ctrl+1…8 / Ctrl+9 |
+| Barre d'adresse | Ctrl+L, Alt+D, F6 |
+| Actualiser / sans cache | Ctrl+R, F5 / Ctrl+Maj+R |
+| Précédent / suivant | Alt+← / Alt+→ |
+| DevTools de la page | F12, Ctrl+Maj+I |
+
+La navigation privée utilise une session en mémoire, effacée à la fermeture du dernier onglet privé ;
+ces onglets ne seront jamais capturés ni indexés.
 
 ## Données locales (prévu)
 
