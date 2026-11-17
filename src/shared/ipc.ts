@@ -1,3 +1,4 @@
+import type { MemoryStats } from './memory'
 import type { ChromeInsets, CreateTabOptions, TabsSnapshot, UiCommand } from './types'
 
 /** Noms des canaux IPC — source unique de vérité pour Main, Preload et Renderer. */
@@ -14,6 +15,8 @@ export const IpcChannels = {
   tabsClose: 'tabs:close',
   tabsActivate: 'tabs:activate',
   tabsMove: 'tabs:move',
+  // Renderer -> Main (invoke) — mémoire
+  memoryGetStats: 'memory:get-stats',
   // Renderer -> Main (send)
   layoutSetInsets: 'layout:set-insets',
   // Main -> Renderer (événements)
@@ -39,6 +42,9 @@ export interface BrowserApi {
     move(tabId: number, toIndex: number): Promise<void>
     /** Retourne une fonction de désabonnement. */
     onChanged(listener: (snapshot: TabsSnapshot) => void): () => void
+  }
+  memory: {
+    getStats(): Promise<MemoryStats>
   }
   ui: {
     onCommand(listener: (command: UiCommand) => void): () => void

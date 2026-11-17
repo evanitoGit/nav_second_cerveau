@@ -9,8 +9,9 @@ export default defineConfig({
   main: {
     resolve: { alias: sharedAlias },
     build: {
-      // Les modules natifs (better-sqlite3, sqlite-vec, onnxruntime) ne doivent jamais être bundlés.
-      externalizeDeps: true
+      // Les dépendances (sqlite-vec, sharp, onnxruntime…) restent dans node_modules, sauf
+      // Readability dont le source est injecté tel quel dans les pages (import `?raw`).
+      externalizeDeps: { exclude: ['@mozilla/readability'] }
     }
   },
   preload: {

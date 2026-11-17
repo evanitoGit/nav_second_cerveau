@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Globe, Lock, VenetianMask } from 'lucide-react'
+import type { MemoryCaptureStatus } from '@shared/memory'
 import { useUiCommand } from '../hooks/useUiCommand'
+import { MemoryIndicator } from './MemoryIndicator'
 import { displayUrl } from '../lib/tabDisplay'
 
 interface AddressBarProps {
@@ -8,10 +10,11 @@ interface AddressBarProps {
   tabId: number | null
   url: string
   isPrivate: boolean
+  memory: MemoryCaptureStatus
   onSubmit(input: string): void
 }
 
-export function AddressBar({ tabId, url, isPrivate, onSubmit }: AddressBarProps) {
+export function AddressBar({ tabId, url, isPrivate, memory, onSubmit }: AddressBarProps) {
   const shownUrl = displayUrl(url)
   const [value, setValue] = useState(shownUrl)
   const [editing, setEditing] = useState(false)
@@ -70,6 +73,7 @@ export function AddressBar({ tabId, url, isPrivate, onSubmit }: AddressBarProps)
           }}
           className="min-w-0 flex-1 select-text bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
         />
+        <MemoryIndicator status={memory} isPrivate={isPrivate} />
       </div>
     </form>
   )

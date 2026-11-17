@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, TabsSnapshot } from '@shared/types'
+import type { MemoryService } from '../memory/MemoryService'
 import type { MainWindow } from '../window/MainWindow'
 
 const EMPTY_SNAPSHOT: TabsSnapshot = { tabs: [], activeTabId: null }
@@ -10,7 +11,7 @@ const EMPTY_SNAPSHOT: TabsSnapshot = { tabs: [], activeTabId: null }
  * Chaque message est vérifié : il doit provenir du webContents de l'UI (jamais d'une page web),
  * et ses arguments sont validés avant usage.
  */
-export function registerBrowserIpc(getWindow: () => MainWindow | null): void {
+export function registerBrowserIpc(getWindow: () => MainWindow | null, memory: MemoryService): void {
   const fromUi = (event: IpcMainInvokeEvent | IpcMainEvent): MainWindow | null => {
     const win = getWindow()
     if (!win || event.sender !== win.uiContents) return null
@@ -51,6 +52,12 @@ export function registerBrowserIpc(getWindow: () => MainWindow | null): void {
 
   ipcMain.handle(IpcChannels.tabsMove, (event, tabId: unknown, toIndex: unknown) => {
     if (isInt(tabId, 1) && isInt(toIndex, 0)) fromUi(event)?.tabs.move(tabId, toIndex)
+  })
+
+  // --- Mémoire ---
+  ipcMain.handle(IpcChannels.memoryGetStats, (event) => {
+    if (!fromUi(event)) throw new Error('expéditeur non autorisé')
+    return memory.stats()
   })
 
   // --- Mise en page ---

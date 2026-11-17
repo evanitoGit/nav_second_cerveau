@@ -28,6 +28,9 @@ const api: BrowserApi = {
     move: (tabId, toIndex) => ipcRenderer.invoke(IpcChannels.tabsMove, tabId, toIndex),
     onChanged: (listener) => subscribe(IpcChannels.tabsChanged, listener)
   },
+  memory: {
+    getStats: () => ipcRenderer.invoke(IpcChannels.memoryGetStats)
+  },
   ui: {
     onCommand: (listener) => subscribe(IpcChannels.uiCommand, listener)
   },

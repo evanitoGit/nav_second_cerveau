@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { WebContentsView, type Rectangle } from 'electron'
+import type { MemoryCaptureStatus } from '@shared/memory'
 import type { TabState } from '@shared/types'
 import { isSafeWebUrl, normalizeAddressInput } from '@shared/url'
 import { BROWSING_PARTITION, PRIVATE_PARTITION } from '../config'
@@ -11,6 +12,8 @@ interface BrowserTabEvents {
   'state-changed': []
   /** La page demande l'ouverture d'une URL dans un nouvel onglet (target=_blank, Ctrl+clic…). */
   'open-url': [url: string, disposition: OpenDisposition]
+  /** Une nouvelle URL est affichée dans le cadre principal (navigation classique ou SPA). */
+  'url-committed': [url: string]
 }
 
 let nextTabId = 1
@@ -27,6 +30,7 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
   private favicon: string | null = null
   /** Vrai dès qu'une navigation a été demandée, même si la page n'a pas encore d'URL. */
   private navigationRequested = false
+  private memoryStatus: MemoryCaptureStatus = 'idle'
 
   constructor(options: { isPrivate?: boolean } = {}) {
     super()
@@ -93,6 +97,16 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
     this.view.setVisible(visible)
   }
 
+  get memory(): MemoryCaptureStatus {
+    return this.memoryStatus
+  }
+
+  setMemoryStatus(status: MemoryCaptureStatus): void {
+    if (status === this.memoryStatus) return
+    this.memoryStatus = status
+    this.emitState()
+  }
+
   getState(): TabState {
     const wc = this.webContents
     return {
@@ -103,7 +117,8 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
       favicon: this.favicon,
       isLoading: wc.isLoading(),
       canGoBack: wc.navigationHistory.canGoBack(),
-      canGoForward: wc.navigationHistory.canGoForward()
+      canGoForward: wc.navigationHistory.canGoForward(),
+      memory: this.memoryStatus
     }
   }
 
@@ -121,11 +136,15 @@ export class BrowserTab extends EventEmitter<BrowserTabEvents> {
 
     wc.on('did-start-loading', this.emitState)
     wc.on('did-stop-loading', this.emitState)
-    wc.on('did-navigate', () => {
+    wc.on('did-navigate', (_e, url) => {
       this.favicon = null
       this.emitState()
+      this.emit('url-committed', url)
     })
-    wc.on('did-navigate-in-page', this.emitState)
+    wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
+      this.emitState()
+      if (isMainFrame) this.emit('url-committed', url)
+    })
     wc.on('page-title-updated', (_e, title) => {
       this.title = title || wc.getURL()
       this.emitState()

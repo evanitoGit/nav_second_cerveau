@@ -1,3 +1,5 @@
+import type { MemoryCaptureStatus } from './memory'
+
 /** État de navigation d'une vue web. */
 export interface NavigationState {
   url: string
@@ -13,6 +15,8 @@ export interface TabState extends NavigationState {
   id: number
   /** Navigation privée : session en mémoire, jamais capturée ni indexée. */
   isPrivate: boolean
+  /** Mémorisation de la page courante (indicateur dans la barre d'adresse). */
+  memory: MemoryCaptureStatus
 }
 
 /** Instantané complet des onglets, poussé du Main vers l'UI à chaque changement. */

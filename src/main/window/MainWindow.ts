@@ -3,6 +3,8 @@ import { BrowserWindow, shell, type Rectangle } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import type { ChromeInsets, UiCommand } from '@shared/types'
 import { DEFAULT_CHROME_TOP, DEFAULT_HOME_URL, isDev } from '../config'
+import { CaptureService } from '../capture/CaptureService'
+import type { MemoryService } from '../memory/MemoryService'
 import { attachShortcuts, type ShortcutAction } from '../shortcuts'
 import { TabManager } from '../tabs/TabManager'
 
@@ -14,9 +16,10 @@ import { TabManager } from '../tabs/TabManager'
 export class MainWindow {
   readonly window: BrowserWindow
   readonly tabs: TabManager
+  private readonly capture: CaptureService
   private insets: ChromeInsets = { top: DEFAULT_CHROME_TOP, right: 0 }
 
-  constructor() {
+  constructor(memory: MemoryService) {
     this.window = new BrowserWindow({
       width: 1280,
       height: 820,
@@ -36,6 +39,7 @@ export class MainWindow {
     })
 
     this.tabs = new TabManager(this.window, () => this.viewBounds())
+    this.capture = new CaptureService(memory, this.window, this.tabs)
     this.bindTabs()
     this.hardenUiContents()
     attachShortcuts(this.uiContents, (action) => this.runShortcut(action))
@@ -47,7 +51,10 @@ export class MainWindow {
     this.window.on('unmaximize', relayout)
     this.window.on('enter-full-screen', relayout)
     this.window.on('leave-full-screen', relayout)
-    this.window.on('closed', () => this.tabs.destroyAll())
+    this.window.on('closed', () => {
+      this.capture.dispose()
+      this.tabs.destroyAll()
+    })
 
     this.loadUi()
     this.tabs.create({ url: DEFAULT_HOME_URL })

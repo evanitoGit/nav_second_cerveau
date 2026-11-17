@@ -29,7 +29,8 @@ Trois processus strictement séparés :
 
 | Couche | Rôle | Accès |
 |---|---|---|
-| **Main** (`src/main`) | Fenêtres, `WebContentsView` (onglets), base SQLite, IA, workers | Node.js complet |
+| **Main** (`src/main`) | Fenêtres, `WebContentsView` (onglets), orchestration capture / mémoire | Node.js complet |
+| **Workers** (`src/main/workers`) | `memory.worker` : SQLite + fichiers · `embedding.worker` : IA | worker_threads |
 | **Preload** (`src/preload`) | Pont IPC typé exposé via `contextBridge` → `window.api` | sandbox, CJS |
 | **Renderer** (`src/renderer`) | UI React (barres, onglets, sidebar Mémoire) | aucun accès Node |
 
@@ -50,7 +51,7 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
     │   ├── ipc.ts                   ✅ noms des canaux + interface BrowserApi
     │   ├── types.ts                 ✅ TabState, TabsSnapshot, ChromeInsets
     │   ├── url.ts                   ✅ saisie barre d'adresse → URL / recherche Google
-    │   └── memory.ts                ⏳ types MemoryEntry, SearchResult
+    │   └── memory.ts                ✅ statut de capture, statistiques
     ├── main/
     │   ├── index.ts                 ✅ bootstrap, single-instance lock
     │   ├── config.ts                ✅
@@ -64,18 +65,22 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
     │   ├── ipc/
     │   │   ├── registerBrowserIpc.ts ✅ navigation + onglets (expéditeur et arguments validés)
     │   │   └── registerMemoryIpc.ts ⏳
-    │   ├── capture/                 ⏳ étape 3
-    │   │   ├── DwellTracker.ts      ⏳ déclenchement après 5 s sur une page
-    │   │   ├── extractContent.ts    ⏳ injection Readability (monde isolé)
-    │   │   └── screenshot.ts        ⏳ capturePage → WebP
-    │   ├── memory/                  ⏳ étape 4
-    │   │   ├── db.ts                ⏳ better-sqlite3 + sqlite-vec + FTS5
-    │   │   ├── migrations/          ⏳
-    │   │   ├── MemoryRepository.ts  ⏳
-    │   │   └── hybridSearch.ts      ⏳ BM25 + cosinus (Reciprocal Rank Fusion)
-    │   └── workers/                 ⏳ worker_threads (rien de lourd sur le thread principal)
-    │       ├── ingest.worker.ts     ⏳ écriture disque / DB
-    │       └── embedding.worker.ts  ⏳ Transformers.js (all-MiniLM-L6-v2)
+    │   ├── capture/
+    │   │   ├── CaptureService.ts    ✅ déclenchement après 5 s sur une page (onglet actif, non privé)
+    │   │   ├── extractContent.ts    ✅ Readability injecté dans un monde JS isolé
+    │   │   └── screenshot.ts        ✅ capturePage → pixels bruts vers le worker
+    │   ├── memory/
+    │   │   ├── config.ts            ✅ délais, tailles, modèle, sites exclus
+    │   │   ├── schema.ts            ✅ migrations SQLite (pages, visites, chunks, FTS5, vec0)
+    │   │   ├── MemoryDatabase.ts    ✅ node:sqlite + sqlite-vec (utilisé dans le worker)
+    │   │   ├── chunking.ts          ✅ découpage du texte pour les embeddings
+    │   │   ├── MemoryService.ts     ✅ façade Main : relais vers les workers, file d'embeddings
+    │   │   └── hybridSearch.ts      ⏳ étape 4 : BM25 + cosinus (Reciprocal Rank Fusion)
+    │   └── workers/
+    │       ├── rpc.ts               ✅ RPC typé Main ⇄ worker (redémarrage auto)
+    │       ├── types.ts             ✅ contrats des workers
+    │       ├── memory.worker.ts     ✅ SQLite, encodage WebP (sharp), écriture des fichiers
+    │       └── embedding.worker.ts  ✅ Transformers.js (multilingual-e5-small)
     ├── preload/
     │   ├── index.ts                 ✅ window.api
     │   └── index.d.ts               ✅ typage global de window.api
@@ -94,6 +99,7 @@ l'envoie au Main, qui recalcule les bornes de la vue — la sidebar utilisera le
                 ├── NavigationBar.tsx ✅ précédent / suivant / actualiser-arrêter
                 ├── AddressBar.tsx   ✅ (Échap, style navigation privée)
                 ├── TabStrip.tsx     ✅ onglets, glisser-déposer, clic molette
+                ├── MemoryIndicator.tsx ✅ icône cerveau : en attente / mémorisée / ignorée
                 └── memory/          ⏳ MemorySidebar, SearchResultCard
 ```
 
@@ -116,6 +122,36 @@ Cmd remplace Ctrl sur macOS.
 La navigation privée utilise une session en mémoire, effacée à la fermeture du dernier onglet privé ;
 ces onglets ne seront jamais capturés ni indexés.
 
-## Données locales (prévu)
+## Mémoire : pipeline de capture
 
-`app.getPath('userData')/` → `memory.db` (SQLite) et `screenshots/<id>.webp`.
+```
+onglet actif + fenêtre visible + page http(s) non privée
+        │  5 s sans changer d'URL (le compte à rebours repart à chaque navigation / changement d'onglet)
+        ▼
+Main : Readability (monde JS isolé) → texte propre · capturePage → pixels 800 px
+        │  transfert sans copie
+        ▼
+memory.worker : WebP (sharp) · SQLite (pages, visites, chunks, FTS5) · fichiers
+        │  si le texte a changé
+        ▼
+embedding.worker : multilingual-e5-small → vecteurs 384 d → sqlite-vec (cosinus)
+```
+
+- Une page déjà capturée il y a moins de 6 h n'est pas recapturée : seule la visite est notée.
+- Pages ignorées : onglets privés, sites de connexion (`memory/config.ts`), pages de moins de 80 caractères.
+- L'icône cerveau de la barre d'adresse indique l'état : gris = en attente, bleu = mémorisée.
+- Le modèle d'embeddings (~120 Mo) est téléchargé depuis Hugging Face au premier besoin, puis reste en cache.
+  Hors ligne, les pages restent « en attente » et sont vectorisées plus tard (nouvel essai toutes les 60 s et au démarrage).
+- Pour tester sans télécharger le modèle : `SECOND_CERVEAU_FAKE_EMBEDDINGS=1 npm run dev` (vecteurs factices).
+
+**SQLite :** on utilise `node:sqlite`, le module SQLite intégré à Node 24 (embarqué dans Electron 45),
+au lieu de `better-sqlite3` : même API synchrone, mais aucun module natif à recompiler pour Electron.
+sqlite-vec est chargé comme extension (binaire précompilé fourni par npm).
+
+## Données locales
+
+Dans `app.getPath('userData')` (sous Linux : `~/.config/nav-second-cerveau/`) :
+
+- `memory/memory.db` — base SQLite (WAL)
+- `memory/screenshots/<id>.webp` — dernière capture de chaque page
+- `models/` — cache du modèle d'embeddings

@@ -33,6 +33,7 @@ export function NavigationBar({ tab }: NavigationBarProps) {
           tabId={tab?.id ?? null}
           url={tab?.url ?? ''}
           isPrivate={tab?.isPrivate ?? false}
+          memory={tab?.memory ?? 'idle'}
           onSubmit={(v) => void nav.navigate(v)}
         />
       </div>
