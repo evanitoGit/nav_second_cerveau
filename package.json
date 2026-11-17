@@ -11,7 +11,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "postinstall": "install-electron"
+    "postinstall": "install-electron",
+    "setup:linux-sandbox": "bash scripts/setup-linux-sandbox.sh"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

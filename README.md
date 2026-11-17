@@ -17,6 +17,12 @@ npm run preview    # lance le build de production
 > le script `postinstall` du projet appelle `install-electron`. Si tu vois `Error: Electron uninstall`,
 > lance `npx install-electron`.
 
+> **Linux (Ubuntu 23.10+ / 24.04+)** : si Electron s'arrête avec
+> `The SUID sandbox helper binary was found, but is not configured correctly`, lance une fois
+> `npm run setup:linux-sandbox` (demande sudo). Le script ajoute un profil AppArmor pour le binaire
+> Electron du projet. On ne désactive **pas** le bac à sable (`--no-sandbox`) : ce navigateur charge
+> des pages web non fiables.
+
 ## Architecture
 
 Trois processus strictement séparés :
